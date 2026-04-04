@@ -215,35 +215,51 @@ def query_liquidsoap(socket_path: Path, command: str) -> str | None:
         return None
 
 
-def get_now_playing(socket_path: Path) -> dict:
-    """Query Liquidsoap for current track metadata."""
+def get_now_playing_from_icecast(host: str, port: int, mount: str) -> dict:
+    """Query Icecast status JSON for the track metadata listeners actually hear.
+
+    Icecast reflects metadata at the point audio is encoded and sent to clients,
+    so it stays in sync with what's audible (unlike Liquidsoap's request.on_air
+    which can be one track ahead during crossfade).
+    """
+    import urllib.request
+
     fallback = {"title": "Connecting...", "artist": "", "album": "", "source_type": "unknown"}
 
-    on_air = query_liquidsoap(socket_path, "request.on_air")
-    if not on_air:
+    try:
+        url = f"http://{host}:{port}/status-json.xsl"
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read())
+    except Exception:
         return fallback
 
-    rid = on_air.strip().split()[0]
-    raw = query_liquidsoap(socket_path, f"request.metadata {rid}")
-    if not raw:
+    source = data.get("icestats", {}).get("source")
+    if not source:
         return fallback
 
-    meta = {}
-    for line in raw.splitlines():
-        m = _METADATA_RE.match(line.strip())
-        if m:
-            meta[m.group(1)] = m.group(2)
+    # Icecast may return a list of sources or a single dict
+    if isinstance(source, list):
+        source = next((s for s in source if s.get("listenurl", "").endswith(mount)), None)
+        if not source:
+            return fallback
 
-    title = meta.get("title", "")
-    if not title:
-        filename = meta.get("filename", "")
-        title = Path(filename).stem if filename else "Unknown"
+    icy_title = source.get("title", "")
+    if not icy_title:
+        return fallback
+
+    # Liquidsoap sends metadata as "Artist - Title" in the icy stream.
+    # Split on the first " - " to separate artist from title.
+    artist = ""
+    title = icy_title
+    if " - " in icy_title:
+        artist, title = icy_title.split(" - ", 1)
 
     return {
         "title": title,
-        "artist": meta.get("artist", ""),
-        "album": meta.get("album", ""),
-        "source_type": meta.get("source", "music"),
+        "artist": artist,
+        "album": "",
+        "source_type": "music",
     }
 
 
@@ -357,7 +373,7 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
 
     @app.get("/now-playing")
     def now_playing():
-        return get_now_playing(config.liquidsoap_socket)
+        return get_now_playing_from_icecast(config.icecast_host, config.icecast_port, config.icecast_mount)
 
     @app.get("/recent-announcements")
     def recent_announcements():
