@@ -1,0 +1,5 @@
+music_dir: /opt/agent-radio/music
+icecast_password: agent-radio-src
+liquidsoap_socket: /tmp/agent-radio.sock
+webhook_port: 8001
+tts_voice: af_heart
