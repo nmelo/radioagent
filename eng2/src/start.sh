@@ -2,6 +2,10 @@
 # Agent Radio - start all services in order: Icecast -> Liquidsoap -> brain
 set -uo pipefail
 
+# Ignore SIGHUP so children (Liquidsoap, brain) survive SSH disconnects.
+# stop.sh uses SIGTERM, not SIGHUP, so this doesn't interfere with shutdown.
+trap '' HUP
+
 RADIO_DIR="${RADIO_DIR:-/opt/agent-radio}"
 PIDDIR="$RADIO_DIR"
 ICECAST_PID="$PIDDIR/icecast.pid"
@@ -30,10 +34,11 @@ fi
 
 HOSTNAME=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
 
-cleanup() {
-    echo "start.sh: process exited unexpectedly, stopping all services..."
+full_shutdown() {
+    echo ""
+    echo "start.sh: received shutdown signal, stopping all services..."
     "$RADIO_DIR/stop.sh" 2>/dev/null || true
-    exit 1
+    exit 0
 }
 
 pid_alive() {
@@ -192,11 +197,25 @@ echo "============================================"
 echo ""
 echo "Stop with: $RADIO_DIR/stop.sh"
 
-# --- Monitor: if any child exits, tear down the rest ---
+# --- Monitor ---
+# Only SIGINT/SIGTERM to start.sh itself triggers full shutdown.
+# Brain exit is logged but does NOT kill Liquidsoap/Icecast (music never stops).
 
-trap cleanup CHLD
+trap full_shutdown INT TERM
 
-# Wait on brain (the last process in the chain)
-if [ "$BRAIN_SKIPPED" = false ] && [ -f "$BRAIN_PID" ]; then
-    wait "$(cat "$BRAIN_PID")" 2>/dev/null || true
-fi
+# Monitor loop: check brain health, keep Liquidsoap/Icecast running
+while true; do
+    # Check brain
+    if [ -f "$BRAIN_PID" ] && ! kill -0 "$(cat "$BRAIN_PID")" 2>/dev/null; then
+        echo "start.sh: WARNING - brain exited. Stream continues. Restart brain or run stop.sh."
+        rm -f "$BRAIN_PID"
+    fi
+
+    # Check Liquidsoap
+    if [ -f "$LIQUIDSOAP_PID" ] && ! kill -0 "$(cat "$LIQUIDSOAP_PID")" 2>/dev/null; then
+        echo "start.sh: WARNING - Liquidsoap exited unexpectedly."
+        rm -f "$LIQUIDSOAP_PID"
+    fi
+
+    sleep 5
+done
