@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "agent_radio",
+  "project_id": "667dd152-e30e-4942-8331-17b8cc16414d"
+}

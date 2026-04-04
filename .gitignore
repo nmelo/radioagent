@@ -1,0 +1,25 @@
+# Source code lives in submodules
+node_modules/
+.next/
+target/
+bin/
+
+# Beads runtime (JSONL is tracked, DB is not)
+.beads/beads.db
+.beads/beads.db-wal
+.beads/beads.db-shm
+.beads/daemon*.log*
+
+# Initech runtime state (machine-specific layout, not shared)
+.initech/
+
+# Local agent config
+*/.mcp.json
+
+# OS artifacts
+.DS_Store
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
