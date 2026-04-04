@@ -37,7 +37,7 @@ end)
 music = blank.skip(max_blank=5., threshold=-40., track_sensitive=true, music)
 
 # Normalize to stereo (handles mono files, prevents crossfade channel mismatch)
-music = source.stereo(music)
+music = audio_to_stereo(music)
 
 # Crossfade between tracks (reduced from 5s to 3s to limit stall window)
 music = crossfade(duration=3.0, music)
