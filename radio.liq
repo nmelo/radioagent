@@ -4,7 +4,7 @@ settings.server.socket := true
 settings.server.socket.path := "/tmp/agent-radio.sock"
 
 # --- Music source ---
-music = playlist("/srv/agent-radio/music", mode="random", reload_mode="watch")
+music = playlist("/home/nmelo/Music", mode="random", reload_mode="watch")
 music = crossfade(duration=5.0, music)
 music = mksafe(music)
 

@@ -1,5 +1,5 @@
 # Music
-music_dir: /srv/agent-radio/music
+music_dir: /home/nmelo/Music
 music_ai_enabled: false
 music_ai_prompt: "calm ambient music, soft pads, gentle drone, deep reverb"
 
