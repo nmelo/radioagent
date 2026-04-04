@@ -19,7 +19,7 @@ liquidsoap_socket: /tmp/agent-radio.sock
 icecast_host: localhost
 icecast_port: 8000
 icecast_mount: /stream
-icecast_password: agent-radio-src
+icecast_password: changeme
 
 # Announcements
 suppress_kinds:

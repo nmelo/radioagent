@@ -33,16 +33,23 @@ music/**/*.wav
 # TTS output
 /tmp/agent-radio/
 
-# Beads runtime
-.beads/beads.db
-.beads/beads.db-wal
-.beads/beads.db-shm
-.beads/daemon*.log*
+# Beads (issue tracker internal state)
+.beads/
 
-# Beads / Dolt files
+# Dolt
 .dolt/
 *.db
 .beads-credential-key
+
+# Claude Code local config
+.claude/
+AGENTS.md
+
+# Runtime config (contains passwords)
+config.yaml
+
+# Music Python init (not needed)
+music/__init__.py
 
 # OS artifacts
 .DS_Store
