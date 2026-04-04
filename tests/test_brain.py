@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import wave
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -16,7 +17,7 @@ from brain import (
     validate_wav,
     process_announcement,
     create_app,
-    get_now_playing,
+    get_now_playing_from_icecast,
     query_liquidsoap,
 )
 
@@ -345,9 +346,10 @@ class TestApp:
         assert data[0]["agent"] == "eng2"
         assert "timestamp" in data[0]
 
-    def test_now_playing_socket_unavailable(self, client):
-        """When Liquidsoap socket is unreachable, return fallback."""
-        resp = client.get("/now-playing")
+    def test_now_playing_icecast_unavailable(self, client):
+        """When Icecast is unreachable, return fallback."""
+        with patch("urllib.request.urlopen", side_effect=Exception("Connection refused")):
+            resp = client.get("/now-playing")
         assert resp.status_code == 200
         data = resp.json()
         assert data["title"] == "Connecting..."
@@ -402,45 +404,62 @@ class TestApp:
         assert resp.headers.get("access-control-allow-origin") == "*"
 
 
-# --- Liquidsoap metadata ---
+# --- Icecast metadata ---
 
 
-class TestNowPlaying:
-    def test_get_now_playing_parses_metadata(self):
-        metadata_response = (
-            'title="Test Track"\n'
-            'artist="Test Artist"\n'
-            'album="Test Album"\n'
-            'source="music"\n'
-            'filename="/opt/agent-radio/music/test.mp3"\n'
-        )
-        with patch("brain.query_liquidsoap") as mock_query:
-            mock_query.side_effect = lambda sp, cmd: {
-                "request.on_air": "5",
-                "request.metadata 5": metadata_response,
-            }.get(cmd)
-            result = get_now_playing(Path("/tmp/test.sock"))
+def _mock_icecast_response(title: str = "", mount: str = "/stream",
+                           multi: bool = False) -> dict:
+    """Build a fake Icecast status-json.xsl response."""
+    source = {"listenurl": f"http://localhost:8000{mount}", "title": title}
+    if multi:
+        other = {"listenurl": "http://localhost:8000/other", "title": "Other Stream"}
+        return {"icestats": {"source": [other, source]}}
+    return {"icestats": {"source": source}}
 
-        assert result["title"] == "Test Track"
-        assert result["artist"] == "Test Artist"
-        assert result["album"] == "Test Album"
+
+class TestNowPlayingFromIcecast:
+    def test_parses_artist_title(self):
+        data = _mock_icecast_response("Ruben Gonzalez - Chanchullo")
+        with patch("urllib.request.urlopen") as mock_open:
+            mock_open.return_value.__enter__ = lambda s: s
+            mock_open.return_value.__exit__ = MagicMock(return_value=False)
+            mock_open.return_value.read.return_value = json.dumps(data).encode()
+            result = get_now_playing_from_icecast("localhost", 8000, "/stream")
+        assert result["title"] == "Chanchullo"
+        assert result["artist"] == "Ruben Gonzalez"
         assert result["source_type"] == "music"
 
-    def test_get_now_playing_fallback_filename(self):
-        metadata_response = (
-            'filename="/opt/agent-radio/music/ambient_01.mp3"\n'
-            'source="music"\n'
-        )
-        with patch("brain.query_liquidsoap") as mock_query:
-            mock_query.side_effect = lambda sp, cmd: {
-                "request.on_air": "1",
-                "request.metadata 1": metadata_response,
-            }.get(cmd)
-            result = get_now_playing(Path("/tmp/test.sock"))
+    def test_title_only_no_dash(self):
+        data = _mock_icecast_response("Ambient Waves")
+        with patch("urllib.request.urlopen") as mock_open:
+            mock_open.return_value.__enter__ = lambda s: s
+            mock_open.return_value.__exit__ = MagicMock(return_value=False)
+            mock_open.return_value.read.return_value = json.dumps(data).encode()
+            result = get_now_playing_from_icecast("localhost", 8000, "/stream")
+        assert result["title"] == "Ambient Waves"
+        assert result["artist"] == ""
 
-        assert result["title"] == "ambient_01"
-
-    def test_get_now_playing_socket_down(self):
-        with patch("brain.query_liquidsoap", return_value=None):
-            result = get_now_playing(Path("/tmp/test.sock"))
+    def test_icecast_unreachable(self):
+        with patch("urllib.request.urlopen", side_effect=Exception("Connection refused")):
+            result = get_now_playing_from_icecast("localhost", 8000, "/stream")
         assert result["title"] == "Connecting..."
+
+    def test_empty_title(self):
+        data = _mock_icecast_response("")
+        with patch("urllib.request.urlopen") as mock_open:
+            mock_open.return_value.__enter__ = lambda s: s
+            mock_open.return_value.__exit__ = MagicMock(return_value=False)
+            mock_open.return_value.read.return_value = json.dumps(data).encode()
+            result = get_now_playing_from_icecast("localhost", 8000, "/stream")
+        assert result["title"] == "Connecting..."
+
+    def test_multiple_sources_selects_mount(self):
+        data = _mock_icecast_response("Brian Eno - Music For Airports",
+                                       mount="/stream", multi=True)
+        with patch("urllib.request.urlopen") as mock_open:
+            mock_open.return_value.__enter__ = lambda s: s
+            mock_open.return_value.__exit__ = MagicMock(return_value=False)
+            mock_open.return_value.read.return_value = json.dumps(data).encode()
+            result = get_now_playing_from_icecast("localhost", 8000, "/stream")
+        assert result["title"] == "Music For Airports"
+        assert result["artist"] == "Brian Eno"
