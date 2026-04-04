@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Radio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0A0A0A;
+  --bg-panel: #141414;
+  --amber: #E8A317;
+  --amber-dim: #B8860B;
+  --amber-glow: rgba(232, 163, 23, 0.15);
+  --cyan: #22D3EE;
+  --red: #EF4444;
+  --text: #D4D4D4;
+  --text-dim: #737373;
+  --font-serif: 'Instrument Serif', serif;
+  --font-mono: 'DM Mono', monospace;
+  --font-sans: 'DM Sans', sans-serif;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Noise texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+}
+
+/* Scan-line overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 101;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.1) 2px,
+    rgba(0, 0, 0, 0.1) 3px
+  );
+}
+
+.container {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 16px;
+  padding-bottom: 100px;
+  position: relative;
+  z-index: 1;
+}
+
+/* --- Header --- */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 0;
+  border-bottom: 1px solid rgba(232, 163, 23, 0.1);
+}
+
+.header-brand {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--amber);
+  letter-spacing: 0.02em;
+}
+
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.on-air-badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  padding: 4px 10px;
+  border-radius: 3px;
+  background: var(--bg-panel);
+  color: var(--text-dim);
+  border: 1px solid rgba(115, 115, 115, 0.2);
+  transition: color 0.3s, border-color 0.3s;
+}
+
+.on-air-badge.active {
+  color: var(--red);
+  border-color: var(--red);
+  animation: pulse-red 1s ease-in-out infinite;
+}
+
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  50% { box-shadow: 0 0 12px 2px rgba(239, 68, 68, 0.4); }
+}
+
+.signal-icon {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--amber);
+  transition: color 0.3s;
+}
+
+.signal-icon.disconnected { color: var(--red); }
+.signal-icon.reconnecting {
+  color: var(--cyan);
+  animation: blink 1s step-end infinite;
+}
+
+/* --- Panels --- */
+
+.panel {
+  padding: 24px 0;
+  border-bottom: 1px solid rgba(232, 163, 23, 0.05);
+}
+
+.panel-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--amber-dim);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+/* --- Now Playing --- */
+
+.now-playing-title {
+  font-family: var(--font-sans);
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: var(--amber);
+  text-shadow: 0 0 20px var(--amber-glow);
+  line-height: 1.3;
+}
+
+.now-playing-meta {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  color: var(--amber-dim);
+  margin-top: 4px;
+}
+
+/* --- Up Next --- */
+
+.up-next-title {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  color: var(--text-dim);
+}
+
+/* --- Wire Feed --- */
+
+.wire-feed-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wire-feed-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--amber);
+  animation: dot-pulse 2s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.wire-feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: 400px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--amber-dim) transparent;
+}
+
+.wire-item {
+  padding: 12px 0;
+  border-left: 2px solid rgba(232, 163, 23, 0.2);
+  padding-left: 12px;
+  transition: opacity 0.5s;
+}
+
+.wire-item.failure {
+  border-left-color: var(--red);
+}
+
+.wire-item-text {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text);
+  line-height: 1.5;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.wire-item-text .prefix {
+  color: var(--amber);
+}
+
+.wire-cursor {
+  display: inline-block;
+  width: 0.5em;
+  height: 1.1em;
+  background: var(--amber);
+  vertical-align: text-bottom;
+  animation: blink-cursor 0.8s step-end infinite;
+  margin-left: 1px;
+}
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.wire-item-time {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.wire-empty {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  font-style: italic;
+  padding: 12px 0;
+}
+
+/* --- Audio Player Bar --- */
+
+.player-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: var(--bg-panel);
+  border-top: 1px solid rgba(232, 163, 23, 0.15);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.play-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid var(--amber);
+  background: transparent;
+  color: var(--amber);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.play-btn:hover { background: var(--amber-glow); }
+
+.play-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: var(--amber);
+}
+
+.player-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.player-station {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--amber-dim);
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-status {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  margin-top: 2px;
+}
+
+.player-status.connected { color: var(--amber); }
+.player-status.disconnected { color: var(--red); }
+.player-status.reconnecting { color: var(--cyan); animation: blink 1s step-end infinite; }
+
+.volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 80px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(232, 163, 23, 0.2);
+  outline: none;
+  flex-shrink: 0;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--amber);
+  cursor: pointer;
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--amber);
+  cursor: pointer;
+  border: none;
+}
+
+@media (max-width: 480px) {
+  .header-brand { font-size: 1.2rem; }
+  .now-playing-title { font-size: 1.2rem; }
+  .player-bar { padding: 14px 12px; }
+  .volume-slider { width: 60px; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header class="header">
+    <div class="header-brand">AGENT RADIO</div>
+    <div class="header-status">
+      <div class="on-air-badge" id="onAirBadge">ON AIR</div>
+      <div class="signal-icon" id="signalIcon">&gt;&gt;&gt;</div>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="panel-label">NOW PLAYING</div>
+    <div class="now-playing-title" id="npTitle">Waiting for signal...</div>
+    <div class="now-playing-meta" id="npMeta"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-label">UP NEXT</div>
+    <div class="up-next-title" id="upNext"><em>Shuffling...</em></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-label wire-feed-label">
+      WIRE FEED
+      <span class="wire-feed-dot"></span>
+    </div>
+    <div class="wire-feed-list" id="wireFeed">
+      <div class="wire-empty" id="wireEmpty">Listening...</div>
+    </div>
+  </section>
+</div>
+
+<div class="player-bar">
+  <button class="play-btn" id="playBtn" aria-label="Play">
+    <svg viewBox="0 0 24 24" id="playIcon"><polygon points="6,3 20,12 6,21"/></svg>
+  </button>
+  <div class="player-info">
+    <div class="player-station">AGENT RADIO STREAM</div>
+    <div class="player-status disconnected" id="playerStatus">Disconnected</div>
+  </div>
+  <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="70" aria-label="Volume">
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  var STREAM_URL = 'http://' + window.location.hostname + ':8000/stream';
+  var TYPING_SPEED = 30;
+  var NP_POLL_INTERVAL = 3000;
+  var MAX_WIRE_ITEMS = 10;
+  var BACKOFF_INITIAL = 2000;
+  var BACKOFF_MAX = 30000;
+
+  var npTitle = document.getElementById('npTitle');
+  var npMeta = document.getElementById('npMeta');
+  var wireFeed = document.getElementById('wireFeed');
+  var wireEmpty = document.getElementById('wireEmpty');
+  var onAirBadge = document.getElementById('onAirBadge');
+  var signalIcon = document.getElementById('signalIcon');
+  var playBtn = document.getElementById('playBtn');
+  var playIcon = document.getElementById('playIcon');
+  var playerStatus = document.getElementById('playerStatus');
+  var volumeSlider = document.getElementById('volumeSlider');
+
+  // SVG markup for play/pause icons (static, no user content)
+  var PLAY_PATH = '<polygon points="6,3 20,12 6,21"/>';
+  var PAUSE_PATH = '<rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/>';
+
+  // --- Utilities ---
+
+  function escapeHtml(str) {
+    var el = document.createElement('span');
+    el.textContent = str;
+    return el.innerHTML;
+  }
+
+  function formatTime(isoStr) {
+    try {
+      var d = new Date(isoStr);
+      return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    } catch(e) {
+      return '';
+    }
+  }
+
+  function isFailureKind(kind) {
+    return kind && (kind.indexOf('failed') !== -1 || kind.indexOf('stuck') !== -1);
+  }
+
+  // --- Audio Player ---
+
+  var audio = null;
+  var isPlaying = false;
+  var userPaused = false;
+  var reconnectTimer = null;
+  var backoffMs = BACKOFF_INITIAL;
+
+  function createAudio() {
+    if (audio) {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+    }
+    audio = new Audio();
+    audio.volume = volumeSlider.value / 100;
+
+    audio.addEventListener('playing', function() {
+      isPlaying = true;
+      backoffMs = BACKOFF_INITIAL;
+      setPlayerStatus('connected');
+      setPlayIcon(false);
+    });
+
+    audio.addEventListener('pause', function() {
+      isPlaying = false;
+      setPlayIcon(true);
+    });
+
+    audio.addEventListener('error', function() {
+      isPlaying = false;
+      setPlayIcon(true);
+      if (!userPaused) startReconnect();
+    });
+
+    audio.addEventListener('stalled', function() {
+      if (!userPaused) startReconnect();
+    });
+
+    audio.src = STREAM_URL;
+  }
+
+  function setPlayIcon(showPlay) {
+    // Safe: only static SVG constants, no user content
+    playIcon.innerHTML = showPlay ? PLAY_PATH : PAUSE_PATH;
+  }
+
+  function setPlayerStatus(state) {
+    playerStatus.className = 'player-status ' + state;
+    var labels = { connected: 'Connected', disconnected: 'Disconnected', reconnecting: 'Reconnecting...' };
+    playerStatus.textContent = labels[state] || state;
+    signalIcon.className = 'signal-icon' + (state === 'disconnected' ? ' disconnected' : state === 'reconnecting' ? ' reconnecting' : '');
+  }
+
+  function startReconnect() {
+    if (userPaused || reconnectTimer) return;
+    setPlayerStatus('disconnected');
+    attemptReconnect();
+  }
+
+  function attemptReconnect() {
+    if (userPaused) return;
+    setPlayerStatus('reconnecting');
+    reconnectTimer = setTimeout(function() {
+      reconnectTimer = null;
+      fetch('/now-playing').then(function(r) {
+        if (r.ok) {
+          createAudio();
+          audio.play().catch(function() {});
+        } else {
+          backoffMs = Math.min(backoffMs * 2, BACKOFF_MAX);
+          attemptReconnect();
+        }
+      }).catch(function() {
+        backoffMs = Math.min(backoffMs * 2, BACKOFF_MAX);
+        attemptReconnect();
+      });
+    }, backoffMs);
+  }
+
+  playBtn.addEventListener('click', function() {
+    if (isPlaying) {
+      userPaused = true;
+      audio.pause();
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    } else {
+      userPaused = false;
+      if (!audio) createAudio();
+      audio.play().catch(function() {});
+    }
+  });
+
+  volumeSlider.addEventListener('input', function() {
+    if (audio) audio.volume = this.value / 100;
+  });
+
+  // --- Now Playing ---
+
+  function fetchNowPlaying() {
+    fetch('/now-playing').then(function(r) { return r.json(); }).then(function(data) {
+      npTitle.textContent = data.title || 'Unknown';
+      var parts = [];
+      if (data.artist) parts.push(data.artist);
+      if (data.album) parts.push(data.album);
+      npMeta.textContent = parts.join(' \u2014 ');
+    }).catch(function() {});
+  }
+
+  setInterval(fetchNowPlaying, NP_POLL_INTERVAL);
+  fetchNowPlaying();
+
+  // --- Wire Feed ---
+
+  var typingQueue = [];
+  var isTyping = false;
+
+  function updateWireOpacity() {
+    var items = wireFeed.querySelectorAll('.wire-item');
+    for (var i = 0; i < items.length; i++) {
+      items[i].style.opacity = Math.max(0.4, 1 - (i * 0.07));
+    }
+  }
+
+  function addWireItem(announcement, animate) {
+    wireEmpty.style.display = 'none';
+
+    var item = document.createElement('div');
+    item.className = 'wire-item' + (isFailureKind(announcement.kind) ? ' failure' : '');
+
+    var textEl = document.createElement('div');
+    textEl.className = 'wire-item-text';
+    item.appendChild(textEl);
+
+    var timeEl = document.createElement('div');
+    timeEl.className = 'wire-item-time';
+    timeEl.textContent = formatTime(announcement.timestamp);
+    item.appendChild(timeEl);
+
+    wireFeed.insertBefore(item, wireFeed.firstChild);
+
+    // Trim excess items (keep wireEmpty element)
+    var allItems = wireFeed.querySelectorAll('.wire-item');
+    while (allItems.length > MAX_WIRE_ITEMS) {
+      allItems[allItems.length - 1].remove();
+      allItems = wireFeed.querySelectorAll('.wire-item');
+    }
+
+    updateWireOpacity();
+
+    if (animate) {
+      typingQueue.push({ el: textEl, text: announcement.text });
+      processTypingQueue();
+    } else {
+      // Static render: build DOM safely
+      var prefix = document.createElement('span');
+      prefix.className = 'prefix';
+      prefix.textContent = '> ';
+      textEl.appendChild(prefix);
+      textEl.appendChild(document.createTextNode(announcement.text));
+    }
+  }
+
+  function processTypingQueue() {
+    if (isTyping || typingQueue.length === 0) return;
+    isTyping = true;
+
+    var job = typingQueue.shift();
+    var el = job.el;
+    var text = job.text;
+    var charIndex = 0;
+
+    onAirBadge.classList.add('active');
+
+    // Build the typing DOM structure
+    el.textContent = '';
+    var prefix = document.createElement('span');
+    prefix.className = 'prefix';
+    prefix.textContent = '> ';
+    el.appendChild(prefix);
+
+    var typedNode = document.createTextNode('');
+    el.appendChild(typedNode);
+
+    var cursor = document.createElement('span');
+    cursor.className = 'wire-cursor';
+    el.appendChild(cursor);
+
+    function typeNext() {
+      if (charIndex < text.length) {
+        typedNode.textContent += text[charIndex];
+        charIndex++;
+        setTimeout(typeNext, TYPING_SPEED);
+      } else {
+        cursor.remove();
+        onAirBadge.classList.remove('active');
+        isTyping = false;
+        processTypingQueue();
+      }
+    }
+
+    typeNext();
+  }
+
+  // --- Load recent announcements ---
+
+  fetch('/recent-announcements').then(function(r) { return r.json(); }).then(function(data) {
+    if (data && data.length > 0) {
+      for (var i = data.length - 1; i >= 0; i--) {
+        addWireItem(data[i], false);
+      }
+    }
+  }).catch(function() {});
+
+  // --- SSE ---
+
+  function connectSSE() {
+    var es = new EventSource('/events');
+
+    es.addEventListener('announcement', function(e) {
+      try {
+        addWireItem(JSON.parse(e.data), true);
+      } catch(err) {}
+    });
+
+    es.addEventListener('now-playing', function(e) {
+      try {
+        var data = JSON.parse(e.data);
+        npTitle.textContent = data.title || 'Unknown';
+        var parts = [];
+        if (data.artist) parts.push(data.artist);
+        if (data.album) parts.push(data.album);
+        npMeta.textContent = parts.join(' \u2014 ');
+      } catch(err) {}
+    });
+
+    es.onerror = function() {
+      signalIcon.className = 'signal-icon reconnecting';
+      setTimeout(function() {
+        if (es.readyState === EventSource.OPEN) {
+          signalIcon.className = 'signal-icon';
+        }
+      }, 3000);
+    };
+  }
+
+  connectSSE();
+
+  // --- Init ---
+
+  createAudio();
+  setPlayerStatus('disconnected');
+  audio.play().then(function() {}).catch(function() {});
+
+})();
+</script>
+</body>
+</html>
