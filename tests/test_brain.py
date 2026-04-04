@@ -1,0 +1,270 @@
+"""Tests for brain.py: rate limiter, WAV validation, pipeline integration."""
+
+from __future__ import annotations
+
+import struct
+import wave
+from datetime import datetime
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pytest
+
+from brain import (
+    AnnouncementRateLimiter,
+    AnnounceRequest,
+    QueuedAnnouncement,
+    validate_wav,
+    push_to_liquidsoap,
+    process_announcement,
+    create_app,
+)
+
+
+# --- Helpers ---
+
+
+def make_wav(path: Path, duration: float = 2.0, sample_rate: int = 24000,
+             amplitude: float = 0.3, silent: bool = False) -> Path:
+    """Create a test WAV file."""
+    n_frames = int(sample_rate * duration)
+    if silent:
+        samples = np.zeros(n_frames, dtype=np.int16)
+    else:
+        t = np.linspace(0, duration, n_frames, endpoint=False)
+        samples = (amplitude * 32767 * np.sin(2 * np.pi * 440 * t)).astype(np.int16)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "w") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sample_rate)
+        w.writeframes(samples.tobytes())
+    return path
+
+
+def make_announcement(text: str = "test", kind: str = "custom",
+                      agent: str = "") -> QueuedAnnouncement:
+    return QueuedAnnouncement(text=text, kind=kind, agent=agent)
+
+
+# --- AnnounceRequest validation ---
+
+
+def test_announce_request_valid():
+    req = AnnounceRequest(detail="hello world")
+    assert req.detail == "hello world"
+    assert req.kind == "custom"
+
+
+def test_announce_request_empty_detail():
+    with pytest.raises(Exception):
+        AnnounceRequest(detail="")
+
+
+def test_announce_request_whitespace_detail():
+    with pytest.raises(Exception):
+        AnnounceRequest(detail="   ")
+
+
+def test_announce_request_extra_fields():
+    req = AnnounceRequest(detail="test", kind="agent.completed", agent="eng1")
+    assert req.agent == "eng1"
+
+
+# --- Rate limiter ---
+
+
+class TestRateLimiter:
+    def test_first_event_immediate(self):
+        rl = AnnouncementRateLimiter(10)
+        processed = []
+        rl.set_processor(lambda a: processed.append(a))
+        result = rl.submit(make_announcement("first"))
+        assert result == "immediate"
+        assert len(processed) == 1
+
+    def test_second_event_within_interval_queues(self):
+        rl = AnnouncementRateLimiter(10)
+        rl.set_processor(lambda a: None)
+        rl.submit(make_announcement("first"))
+        result = rl.submit(make_announcement("second"))
+        assert result == "queued"
+        assert len(rl.queue) == 1
+
+    def test_queue_full_drops(self):
+        rl = AnnouncementRateLimiter(10, max_queue=3)
+        rl.set_processor(lambda a: None)
+        rl.submit(make_announcement("first"))  # immediate
+        rl.submit(make_announcement("q1"))  # queued
+        rl.submit(make_announcement("q2"))  # queued
+        rl.submit(make_announcement("q3"))  # queued
+        result = rl.submit(make_announcement("overflow"))  # dropped
+        assert result == "dropped"
+
+    def test_15_events_first_immediate_10_queued_4_dropped(self):
+        rl = AnnouncementRateLimiter(10, max_queue=10)
+        rl.set_processor(lambda a: None)
+        results = [rl.submit(make_announcement(f"e{i}")) for i in range(15)]
+        assert results[0] == "immediate"
+        assert results[1:11] == ["queued"] * 10
+        assert results[11:] == ["dropped"] * 4
+
+    def test_drain_remaining(self):
+        rl = AnnouncementRateLimiter(10)
+        processed = []
+        rl.set_processor(lambda a: processed.append(a.text))
+        rl.submit(make_announcement("first"))  # immediate
+        rl.submit(make_announcement("q1"))
+        rl.submit(make_announcement("q2"))
+        assert len(rl.queue) == 2
+        rl.drain_remaining()
+        assert len(rl.queue) == 0
+        assert processed == ["first", "q1", "q2"]
+
+    def test_event_after_interval_is_immediate(self):
+        rl = AnnouncementRateLimiter(10)
+        rl.set_processor(lambda a: None)
+        rl.submit(make_announcement("first"))
+        rl.last_announcement -= 11  # Simulate 11 seconds passing
+        result = rl.submit(make_announcement("second"))
+        assert result == "immediate"
+
+
+# --- WAV validation ---
+
+
+class TestWavValidation:
+    def test_valid_wav(self, tmp_path):
+        wav = make_wav(tmp_path / "valid.wav", duration=2.0)
+        assert validate_wav(wav) is True
+
+    def test_too_short(self, tmp_path):
+        wav = make_wav(tmp_path / "short.wav", duration=0.1)
+        assert validate_wav(wav) is False
+
+    def test_too_long(self, tmp_path):
+        wav = make_wav(tmp_path / "long.wav", duration=31.0)
+        assert validate_wav(wav) is False
+
+    def test_silent_wav(self, tmp_path):
+        wav = make_wav(tmp_path / "silent.wav", duration=2.0, silent=True)
+        assert validate_wav(wav) is False
+
+    def test_nonexistent_file(self, tmp_path):
+        assert validate_wav(tmp_path / "nope.wav") is False
+
+    def test_corrupt_file(self, tmp_path):
+        bad = tmp_path / "corrupt.wav"
+        bad.write_bytes(b"not a wav file at all")
+        assert validate_wav(bad) is False
+
+    def test_boundary_duration(self, tmp_path):
+        wav_half = make_wav(tmp_path / "half.wav", duration=0.5)
+        assert validate_wav(wav_half) is True
+        wav_30 = make_wav(tmp_path / "thirty.wav", duration=30.0)
+        assert validate_wav(wav_30) is True
+
+
+# --- Pipeline integration ---
+
+
+class TestPipeline:
+    def _make_config(self, tmp_path):
+        music = tmp_path / "music"
+        music.mkdir()
+        (music / "t.mp3").write_bytes(b"fake")
+        from config import RadioConfig
+        return RadioConfig(
+            music_dir=music,
+            liquidsoap_socket=Path(tmp_path / "test.sock"),
+            webhook_port=8001,
+            icecast_password="test",
+        )
+
+    def test_process_announcement_success(self, tmp_path):
+        config = self._make_config(tmp_path)
+
+        mock_tts = MagicMock()
+        def fake_render(text, output_path):
+            make_wav(output_path, duration=2.0)
+            return True
+        mock_tts.render.side_effect = fake_render
+
+        with patch("brain.push_to_liquidsoap", return_value=True):
+            a = make_announcement("hello world", kind="agent.completed", agent="eng1")
+            result = process_announcement(a, mock_tts, config)
+
+        assert result is True
+        mock_tts.render.assert_called_once()
+
+    def test_process_announcement_tts_fails(self, tmp_path):
+        config = self._make_config(tmp_path)
+        mock_tts = MagicMock()
+        mock_tts.render.return_value = False
+
+        a = make_announcement("hello")
+        result = process_announcement(a, mock_tts, config)
+        assert result is False
+
+    def test_process_announcement_wav_invalid(self, tmp_path):
+        config = self._make_config(tmp_path)
+        mock_tts = MagicMock()
+        def fake_render_short(text, output_path):
+            make_wav(output_path, duration=0.1)  # too short
+            return True
+        mock_tts.render.side_effect = fake_render_short
+
+        a = make_announcement("hello")
+        result = process_announcement(a, mock_tts, config)
+        assert result is False
+
+
+# --- FastAPI app ---
+
+
+class TestApp:
+    @pytest.fixture
+    def client(self, tmp_path):
+        from fastapi.testclient import TestClient
+        config = TestPipeline._make_config(None, tmp_path)
+        mock_tts = MagicMock()
+        mock_tts.name = "mock"
+        def fake_render(text, output_path):
+            make_wav(output_path, duration=2.0)
+            return True
+        mock_tts.render.side_effect = fake_render
+
+        with patch("brain.push_to_liquidsoap", return_value=True):
+            app = create_app(config, mock_tts)
+            yield TestClient(app)
+
+    def test_post_valid(self, client):
+        resp = client.post("/announce", json={"detail": "test announcement"})
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "immediate"
+
+    def test_post_missing_detail(self, client):
+        resp = client.post("/announce", json={"kind": "test"})
+        assert resp.status_code == 422
+
+    def test_post_empty_detail(self, client):
+        resp = client.post("/announce", json={"detail": ""})
+        assert resp.status_code == 422
+
+    def test_post_not_json(self, client):
+        resp = client.post("/announce", content="not json", headers={"content-type": "text/plain"})
+        assert resp.status_code == 422
+
+    def test_rate_limiting_429(self, client):
+        # First succeeds
+        resp1 = client.post("/announce", json={"detail": "first"})
+        assert resp1.status_code == 200
+        # Fill queue (10 items)
+        for i in range(10):
+            resp = client.post("/announce", json={"detail": f"queued {i}"})
+            assert resp.status_code == 200
+            assert resp.json()["status"] == "queued"
+        # 12th should be 429
+        resp_drop = client.post("/announce", json={"detail": "overflow"})
+        assert resp_drop.status_code == 429
