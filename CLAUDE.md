@@ -36,6 +36,28 @@ initech send <agent> "message"   # Send message to an agent
 initech peek <agent>              # Read agent terminal output
 ```
 
+## Bead Visibility (MANDATORY)
+
+Every agent MUST register their active bead with the TUI and clear it when done. This is how the team sees who is working on what.
+
+**When you start a bead:**
+```bash
+bd update <id> --status in_progress --assignee <your-role>
+initech bead <id>    # <-- MANDATORY: registers bead in TUI
+```
+
+**When you finish a bead:**
+```bash
+initech send super "[from <role>] <id>: done"   # report FIRST
+initech bead --clear                              # clear AFTER reporting
+```
+
+**Rules:**
+- `initech bead <id>` is NOT optional. If you skip it, other agents cannot see what you are working on.
+- `initech bead --clear` is NOT optional. If you skip it, the TUI shows stale data.
+- Always report to super BEFORE clearing. If you clear first and the report fails, super gets no notification.
+- Failure to follow this protocol is a process violation. Super will send you back to re-register.
+
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker

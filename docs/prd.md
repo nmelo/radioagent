@@ -1,0 +1,144 @@
+# Agent Radio PRD
+
+## 1. Problem Statement
+
+### 1.1 The Problem
+
+Developers running multi-agent AI coding sessions need ambient awareness of what's happening across their agent fleet. Current notification channels (terminal TUI, browser companion, Slack/Discord webhooks) all require looking at a screen. There is no audio channel: nothing you can hear from the kitchen, the couch, or while walking around the house.
+
+Alert sounds (beeps, chimes) are annoying and lack context. You hear a ding but don't know what happened. Email/Slack notifications pile up silently. The gap is an ambient audio feed that communicates meaningful information without demanding visual attention.
+
+### 1.2 Why Now
+
+Local AI models for music generation (MusicGen) and text-to-speech (Kokoro, Orpheus) can run on consumer GPUs. Liquidsoap handles real-time audio mixing and streaming. Icecast serves HTTP audio streams to any device. The entire stack is open-source and runs on a single machine. None of this was practical two years ago.
+
+## 2. User
+
+### 2.1 Primary User
+
+A developer running AI coding agents who wants ambient awareness of agent activity without being tethered to a screen. They have a local network with a GPU-equipped machine (for music and voice generation) and one or more listening devices (laptop, phone, kitchen speaker).
+
+### 2.2 Secondary Users (Future)
+
+Team members who want to monitor shared agent sessions remotely. CI/CD operators who want audio alerts for pipeline events. Anyone who benefits from ambient notification via an audio stream.
+
+## 3. Success Criteria
+
+### 3.1 Core Success
+
+1. The radio plays continuously without interruption for 24+ hours
+2. Announcements are audible and intelligible over the ambient music
+3. The music-to-voice transition sounds smooth (no clicks, pops, or jarring volume changes)
+4. End-to-end announcement latency (webhook POST to voice audible on stream) is under 10 seconds
+5. Any HTTP audio client can connect and listen (browser, VLC, phone app)
+
+### 3.2 Measurable Checks
+
+- Continuous uptime: start the radio, leave it running overnight, verify stream is still live in the morning
+- Announcement clarity: play 10 announcements, verify all are intelligible by ear
+- Transition quality: no audible artifacts during 20 consecutive duck-and-restore cycles
+- Latency: measure time from POST to audible output, verify < 10 seconds for 95% of events
+- Client compatibility: connect from Chrome, Safari, VLC, and an iPhone, verify all play
+
+## 4. Non-Goals
+
+- Bidirectional communication (listeners cannot send commands back through the stream)
+- Video or visual components
+- Public internet streaming (LAN only for v1)
+- Music generation model training (use pretrained models only)
+- Integration with any specific event source (the webhook interface is generic JSON)
+- Mobile app development (use browser or VLC)
+- Scheduled programming or time-of-day music moods (future phase)
+- Multiple simultaneous streams
+- Stream recording or archival
+
+## 5. User Journeys
+
+### 5.1 Start the Radio
+
+```
+$ cd ~/agent-radio
+$ ./start.sh
+[agent-radio] Starting Icecast...
+[agent-radio] Starting Liquidsoap...
+[agent-radio] Starting brain...
+[agent-radio] Music: curated library (GPU warming up for AI generation)
+[agent-radio] TTS: kokoro (am_michael)
+[agent-radio] Streaming at http://192.168.1.100:8000/stream
+[agent-radio] Webhook endpoint at http://192.168.1.100:8001/announce
+```
+
+Operator opens `http://192.168.1.100:8000/stream` in a browser tab. Ambient music starts playing.
+
+### 5.2 Announcement Arrives
+
+External system POSTs:
+```json
+{
+  "kind": "agent.completed",
+  "agent": "eng1",
+  "detail": "Finished the auth refactor. Commit abc123.",
+  "project": "initech"
+}
+```
+
+The listener hears:
+- Music gently fades down over ~1 second
+- A calm voice says: "eng1 finished the auth refactor"
+- Music gently fades back up over ~1 second
+
+### 5.3 GPU Becomes Unavailable
+
+MusicGen is generating ambient clips on the GPU. Another process claims GPU memory. MusicGen fails with CUDA OOM. Brain logs a warning and stops generating new clips. Liquidsoap continues playing from existing curated and pre-generated files. The listener hears no interruption. When the GPU is free again, brain resumes AI music generation.
+
+### 5.4 Manual Announcement
+
+```
+$ curl -X POST http://192.168.1.100:8001/announce \
+    -H 'Content-Type: application/json' \
+    -d '{"detail": "Phase 3 is complete. Shipping v1.7.0."}'
+```
+
+The listener hears the announcement within seconds.
+
+## 6. Risks
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| TTS model produces garbled output | Unintelligible announcement | Validate audio duration/RMS before pushing to Liquidsoap. Drop silent or too-short clips. |
+| MusicGen generates unpleasant music | Listener turns off the radio | Curated fallback library provides known-good ambient music. AI clips are pre-screened (RMS, duration). |
+| Liquidsoap crashes | Stream goes silent | Systemd auto-restart. Brain detects Liquidsoap socket gone and logs alert. |
+| Icecast crashes | Listeners disconnected | Systemd auto-restart. Liquidsoap reconnects automatically. |
+| GPU OOM from concurrent workloads | No AI music generation | Curated library fallback. Music generation is non-critical path. |
+| Webhook flood (100 events/second) | TTS backlog, delayed announcements | Rate limit: max 1 announcement per 10 seconds. Queue excess, drop if queue > 10. |
+
+## 7. Scope Boundaries
+
+### 7.1 MVP Scope (Build This)
+
+- Continuous music playback via Liquidsoap + Icecast
+- Curated music library support (operator provides ambient MP3/FLAC/WAV files)
+- HTTP webhook endpoint for receiving announcement events
+- Event-to-script translation (JSON -> natural language sentence)
+- TTS generation (Kokoro, pluggable for Orpheus later)
+- Voice announcement injection into Liquidsoap via request queue
+- Automatic music ducking during announcements (Liquidsoap smooth_add)
+- Configuration via YAML file
+- Start/stop scripts
+
+### 7.2 Post-MVP (Build Later, If Needed)
+
+- AI music generation via MusicGen (drops clips into playlist directory)
+- Scheduled programming (different moods by time of day)
+- Station ID jingles between announcements
+- Announcement priority levels (critical events get different TTS treatment)
+- Stream metadata updates (now-playing info)
+- Multiple TTS engine support (Orpheus for high-quality, Kokoro for speed)
+- Web UI showing now-playing, recent announcements, stream status
+
+### 7.3 Never Build
+
+- Listener-to-agent communication via audio
+- DRM or access control on the stream
+- A mobile app
+- Cloud-hosted streaming

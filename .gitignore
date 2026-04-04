@@ -1,25 +1,52 @@
-# Source code lives in submodules
-node_modules/
-.next/
-target/
-bin/
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
 
-# Beads runtime (JSONL is tracked, DB is not)
+# Initech (contains secrets: Slack tokens, webhook URLs)
+initech.yaml
+.initech/
+
+# Agent directories (local workspaces, nested repo clones)
+super/
+pm/
+eng1/
+eng2/CLAUDE.md
+qa1/
+shipper/
+
+# Agent local state
+*/playbooks/
+*/.mcp.json
+
+# Music files (large, operator-provided)
+music/*.mp3
+music/*.flac
+music/*.wav
+music/**/*.mp3
+music/**/*.flac
+music/**/*.wav
+
+# TTS output
+/tmp/agent-radio/
+
+# Beads runtime
 .beads/beads.db
 .beads/beads.db-wal
 .beads/beads.db-shm
 .beads/daemon*.log*
 
-# Initech runtime state (machine-specific layout, not shared)
-.initech/
-
-# Local agent config
-*/.mcp.json
+# Beads / Dolt files
+.dolt/
+*.db
+.beads-credential-key
 
 # OS artifacts
 .DS_Store
 
-# Beads / Dolt files (added by bd init)
-.dolt/
-*.db
-.beads-credential-key
+# IDE
+.vscode/
+.idea/
