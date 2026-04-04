@@ -16,6 +16,8 @@ from brain import (
     validate_wav,
     process_announcement,
     create_app,
+    get_now_playing,
+    query_liquidsoap,
 )
 
 
@@ -324,5 +326,121 @@ class TestApp:
             "agent": "eng1",
         })
         assert resp.status_code == 200
-        # The text should have been templated by generate_script
         assert resp.json()["status"] == "immediate"
+
+    def test_recent_announcements_empty(self, client):
+        resp = client.get("/recent-announcements")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_recent_announcements_after_post(self, client):
+        client.post("/announce", json={"detail": "first announcement", "agent": "eng1"})
+        client.post("/announce", json={"detail": "second announcement", "agent": "eng2"})
+        resp = client.get("/recent-announcements")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 2
+        # Most recent first (appendleft)
+        assert "second announcement" in data[0]["text"]
+        assert data[0]["agent"] == "eng2"
+        assert "timestamp" in data[0]
+
+    def test_now_playing_socket_unavailable(self, client):
+        """When Liquidsoap socket is unreachable, return fallback."""
+        resp = client.get("/now-playing")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["title"] == "Connecting..."
+
+    def test_dashboard_missing(self, client):
+        """GET / returns 404 when dashboard.html doesn't exist."""
+        resp = client.get("/")
+        assert resp.status_code == 404
+
+    def test_dashboard_served(self, tmp_path):
+        """GET / serves dashboard.html when present."""
+        from fastapi.testclient import TestClient
+        config = _make_config(tmp_path)
+        mock_tts = MagicMock()
+        mock_tts.name = "mock"
+        mock_tts.render.return_value = False
+
+        # Create dashboard.html next to brain.py's expected location
+        with patch("brain.push_to_liquidsoap", return_value=True), \
+             patch("brain._schedule_wav_cleanup"), \
+             patch("brain.Path") as mock_path_cls:
+            # We need to mock __file__ parent to point to tmp_path
+            pass
+
+        # Simpler: just test that the endpoint logic works
+        # by creating the file where brain.py looks for it
+        import brain
+        html_path = Path(brain.__file__).parent / "dashboard.html"
+        html_path.write_text("<html><body>Dashboard</body></html>")
+        try:
+            with patch("brain.push_to_liquidsoap", return_value=True), \
+                 patch("brain._schedule_wav_cleanup"):
+                app = create_app(config, mock_tts)
+                tc = TestClient(app)
+                resp = tc.get("/")
+                assert resp.status_code == 200
+                assert "Dashboard" in resp.text
+        finally:
+            html_path.unlink(missing_ok=True)
+
+    def test_suppressed_not_in_history(self, client):
+        """Suppressed events should not appear in announcement history."""
+        client.post("/announce", json={"detail": "idle", "kind": "agent.idle"})
+        resp = client.get("/recent-announcements")
+        assert resp.json() == []
+
+    def test_cors_headers(self, client):
+        resp = client.options("/now-playing", headers={
+            "Origin": "http://192.168.1.100:8000",
+            "Access-Control-Request-Method": "GET",
+        })
+        assert resp.headers.get("access-control-allow-origin") == "*"
+
+
+# --- Liquidsoap metadata ---
+
+
+class TestNowPlaying:
+    def test_get_now_playing_parses_metadata(self):
+        metadata_response = (
+            'title="Test Track"\n'
+            'artist="Test Artist"\n'
+            'album="Test Album"\n'
+            'source="music"\n'
+            'filename="/opt/agent-radio/music/test.mp3"\n'
+        )
+        with patch("brain.query_liquidsoap") as mock_query:
+            mock_query.side_effect = lambda sp, cmd: {
+                "request.on_air": "5",
+                "request.metadata 5": metadata_response,
+            }.get(cmd)
+            result = get_now_playing(Path("/tmp/test.sock"))
+
+        assert result["title"] == "Test Track"
+        assert result["artist"] == "Test Artist"
+        assert result["album"] == "Test Album"
+        assert result["source_type"] == "music"
+
+    def test_get_now_playing_fallback_filename(self):
+        metadata_response = (
+            'filename="/opt/agent-radio/music/ambient_01.mp3"\n'
+            'source="music"\n'
+        )
+        with patch("brain.query_liquidsoap") as mock_query:
+            mock_query.side_effect = lambda sp, cmd: {
+                "request.on_air": "1",
+                "request.metadata 1": metadata_response,
+            }.get(cmd)
+            result = get_now_playing(Path("/tmp/test.sock"))
+
+        assert result["title"] == "ambient_01"
+
+    def test_get_now_playing_socket_down(self):
+        with patch("brain.query_liquidsoap", return_value=None):
+            result = get_now_playing(Path("/tmp/test.sock"))
+        assert result["title"] == "Connecting..."

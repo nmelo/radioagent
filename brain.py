@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
 import signal
 import socket
 import threading
@@ -18,8 +20,9 @@ from pathlib import Path
 
 import numpy as np
 import uvicorn
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, field_validator
 
 from config import RadioConfig, load_config
@@ -188,6 +191,74 @@ def push_to_liquidsoap(socket_path: Path, wav_path: Path, retries: int = 3) -> b
     return False
 
 
+# --- Liquidsoap metadata query ---
+
+_METADATA_RE = re.compile(r'^(\w+)="(.*)"$')
+
+
+def query_liquidsoap(socket_path: Path, command: str) -> str | None:
+    """Send a command to Liquidsoap and return the response body (before END)."""
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(3.0)
+        s.connect(str(socket_path))
+        s.sendall(f"{command}\r\n".encode())
+        resp = b""
+        while b"END" not in resp:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            resp += chunk
+        s.close()
+        return resp.decode().replace("END", "").strip()
+    except (socket.error, socket.timeout):
+        return None
+
+
+def get_now_playing(socket_path: Path) -> dict:
+    """Query Liquidsoap for current track metadata."""
+    fallback = {"title": "Connecting...", "artist": "", "album": "", "source_type": "unknown"}
+
+    on_air = query_liquidsoap(socket_path, "request.on_air")
+    if not on_air:
+        return fallback
+
+    rid = on_air.strip().split()[0]
+    raw = query_liquidsoap(socket_path, f"request.metadata {rid}")
+    if not raw:
+        return fallback
+
+    meta = {}
+    for line in raw.splitlines():
+        m = _METADATA_RE.match(line.strip())
+        if m:
+            meta[m.group(1)] = m.group(2)
+
+    title = meta.get("title", "")
+    if not title:
+        filename = meta.get("filename", "")
+        title = Path(filename).stem if filename else "Unknown"
+
+    return {
+        "title": title,
+        "artist": meta.get("artist", ""),
+        "album": meta.get("album", ""),
+        "source_type": meta.get("source", "music"),
+    }
+
+
+# --- SSE broadcast ---
+
+
+def _broadcast_sse(clients: list[asyncio.Queue], event_type: str, data: dict) -> None:
+    """Push an SSE event to all connected clients. Safe to call from any thread."""
+    for q in list(clients):
+        try:
+            q.put_nowait({"event": event_type, "data": data})
+        except asyncio.QueueFull:
+            pass
+
+
 # --- WAV cleanup ---
 
 _CLEANUP_DELAY_SECONDS = 60
@@ -248,6 +319,8 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         lambda a: process_announcement(a, tts, config)
     )
     drain_task = None
+    announcement_history: deque[dict] = deque(maxlen=20)
+    sse_clients: list[asyncio.Queue] = []
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -261,9 +334,62 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         logger.info("Shutting down, draining %d queued announcements...", len(rate_limiter.queue))
         drain_task.cancel()
         rate_limiter.drain_remaining()
+        # Close SSE clients
+        for q in sse_clients:
+            await q.put(None)
+        sse_clients.clear()
         logger.info("Brain stopped")
 
     app = FastAPI(lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.get("/")
+    def dashboard():
+        html_path = Path(__file__).parent / "dashboard.html"
+        if html_path.exists():
+            return FileResponse(html_path, media_type="text/html")
+        return JSONResponse(status_code=404, content={"error": "dashboard.html not found"})
+
+    @app.get("/now-playing")
+    def now_playing():
+        return get_now_playing(config.liquidsoap_socket)
+
+    @app.get("/recent-announcements")
+    def recent_announcements():
+        return list(announcement_history)
+
+    @app.get("/events")
+    async def events(request: Request):
+        q: asyncio.Queue = asyncio.Queue(maxsize=50)
+        sse_clients.append(q)
+
+        async def event_generator():
+            try:
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        item = await asyncio.wait_for(q.get(), timeout=30)
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+                        continue
+                    if item is None:
+                        break
+                    yield f"event: {item['event']}\ndata: {json.dumps(item['data'])}\n\n"
+            finally:
+                if q in sse_clients:
+                    sse_clients.remove(q)
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.post("/announce")
     def announce(req: AnnounceRequest):
@@ -277,6 +403,16 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         if script is None:
             logger.info("Suppressed [%s] from %s", req.kind, req.agent or "unknown")
             return {"status": "suppressed"}
+
+        # Record in history and broadcast to SSE clients
+        record = {
+            "text": script,
+            "agent": req.agent,
+            "kind": req.kind,
+            "timestamp": datetime.now().isoformat(),
+        }
+        announcement_history.appendleft(record)
+        _broadcast_sse(sse_clients, "announcement", record)
 
         entry = QueuedAnnouncement(
             text=script,
