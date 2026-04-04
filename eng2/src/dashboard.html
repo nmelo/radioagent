@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 130%; }
 
 :root {
   --bg: #0A0A0A;
@@ -165,6 +166,26 @@ body::after {
   color: var(--amber-dim);
   margin-top: 4px;
 }
+
+.skip-btn {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  padding: 4px 10px;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--amber-dim);
+  border: 1px solid rgba(232, 163, 23, 0.2);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.skip-btn:hover {
+  color: var(--amber);
+  border-color: var(--amber);
+  background: var(--amber-glow);
+}
+.skip-btn:active { transform: scale(0.95); }
 
 /* --- Up Next --- */
 
@@ -379,7 +400,10 @@ body::after {
   </header>
 
   <section class="panel">
-    <div class="panel-label">NOW PLAYING</div>
+    <div class="panel-label" style="display:flex;align-items:center;justify-content:space-between;">
+      NOW PLAYING
+      <button class="skip-btn" id="skipBtn" aria-label="Skip track">SKIP &gt;&gt;</button>
+    </div>
     <div class="now-playing-title" id="npTitle">Waiting for signal...</div>
     <div class="now-playing-meta" id="npMeta"></div>
   </section>
@@ -554,6 +578,24 @@ body::after {
     if (audio) audio.volume = this.value / 100;
   });
 
+  // --- Skip ---
+
+  var skipBtn = document.getElementById('skipBtn');
+  skipBtn.addEventListener('click', function() {
+    skipBtn.disabled = true;
+    skipBtn.textContent = 'SKIPPING...';
+    fetch('/skip', { method: 'POST' }).then(function(r) {
+      if (r.ok) {
+        setTimeout(fetchNowPlaying, 1000);
+      }
+    }).catch(function() {}).finally(function() {
+      setTimeout(function() {
+        skipBtn.disabled = false;
+        skipBtn.textContent = 'SKIP >>';
+      }, 1500);
+    });
+  });
+
   // --- Now Playing ---
 
   function fetchNowPlaying() {
@@ -709,7 +751,18 @@ body::after {
 
   createAudio();
   setPlayerStatus('disconnected');
-  audio.play().then(function() {}).catch(function() {});
+  audio.play().then(function() {}).catch(function() {
+    // Autoplay blocked by browser. Show play button and auto-start on first user interaction.
+    var autoplayHandler = function() {
+      if (!isPlaying && !userPaused) {
+        audio.play().catch(function() {});
+      }
+      document.removeEventListener('click', autoplayHandler);
+      document.removeEventListener('keydown', autoplayHandler);
+    };
+    document.addEventListener('click', autoplayHandler);
+    document.addEventListener('keydown', autoplayHandler);
+  });
 
 })();
 </script>

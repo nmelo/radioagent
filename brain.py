@@ -363,6 +363,13 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
     def recent_announcements():
         return list(announcement_history)
 
+    @app.post("/skip")
+    def skip_track():
+        result = query_liquidsoap(config.liquidsoap_socket, "music.skip")
+        if result is not None:
+            return {"status": "skipped"}
+        return JSONResponse(status_code=503, content={"status": "error", "message": "Liquidsoap unavailable"})
+
     @app.get("/events")
     async def events(request: Request):
         q: asyncio.Queue = asyncio.Queue(maxsize=50)
