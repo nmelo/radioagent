@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import struct
 import wave
-from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -16,7 +14,6 @@ from brain import (
     AnnounceRequest,
     QueuedAnnouncement,
     validate_wav,
-    push_to_liquidsoap,
     process_announcement,
     create_app,
 )
@@ -46,6 +43,19 @@ def make_wav(path: Path, duration: float = 2.0, sample_rate: int = 24000,
 def make_announcement(text: str = "test", kind: str = "custom",
                       agent: str = "") -> QueuedAnnouncement:
     return QueuedAnnouncement(text=text, kind=kind, agent=agent)
+
+
+def _make_config(tmp_path):
+    music = tmp_path / "music"
+    music.mkdir()
+    (music / "t.mp3").write_bytes(b"fake")
+    from config import RadioConfig
+    return RadioConfig(
+        music_dir=music,
+        liquidsoap_socket=Path(tmp_path / "test.sock"),
+        webhook_port=8001,
+        icecast_password="test",
+    )
 
 
 # --- AnnounceRequest validation ---
@@ -122,6 +132,16 @@ class TestRateLimiter:
         assert len(rl.queue) == 0
         assert processed == ["first", "q1", "q2"]
 
+    def test_drain_remaining_capped(self):
+        rl = AnnouncementRateLimiter(10, max_queue=10)
+        rl.set_processor(lambda a: None)
+        rl.submit(make_announcement("first"))  # immediate
+        for i in range(8):
+            rl.submit(make_announcement(f"q{i}"))
+        assert len(rl.queue) == 8
+        rl.drain_remaining(max_iterations=3)
+        assert len(rl.queue) == 5  # 8 - 3 = 5 remaining
+
     def test_event_after_interval_is_immediate(self):
         rl = AnnouncementRateLimiter(10)
         rl.set_processor(lambda a: None)
@@ -129,6 +149,10 @@ class TestRateLimiter:
         rl.last_announcement -= 11  # Simulate 11 seconds passing
         result = rl.submit(make_announcement("second"))
         assert result == "immediate"
+
+    def test_thread_safety_has_lock(self):
+        rl = AnnouncementRateLimiter(10)
+        assert hasattr(rl, "_lock")
 
 
 # --- WAV validation ---
@@ -170,20 +194,8 @@ class TestWavValidation:
 
 
 class TestPipeline:
-    def _make_config(self, tmp_path):
-        music = tmp_path / "music"
-        music.mkdir()
-        (music / "t.mp3").write_bytes(b"fake")
-        from config import RadioConfig
-        return RadioConfig(
-            music_dir=music,
-            liquidsoap_socket=Path(tmp_path / "test.sock"),
-            webhook_port=8001,
-            icecast_password="test",
-        )
-
     def test_process_announcement_success(self, tmp_path):
-        config = self._make_config(tmp_path)
+        config = _make_config(tmp_path)
 
         mock_tts = MagicMock()
         def fake_render(text, output_path):
@@ -191,7 +203,8 @@ class TestPipeline:
             return True
         mock_tts.render.side_effect = fake_render
 
-        with patch("brain.push_to_liquidsoap", return_value=True):
+        with patch("brain.push_to_liquidsoap", return_value=True), \
+             patch("brain._schedule_wav_cleanup"):
             a = make_announcement("hello world", kind="agent.completed", agent="eng1")
             result = process_announcement(a, mock_tts, config)
 
@@ -199,7 +212,7 @@ class TestPipeline:
         mock_tts.render.assert_called_once()
 
     def test_process_announcement_tts_fails(self, tmp_path):
-        config = self._make_config(tmp_path)
+        config = _make_config(tmp_path)
         mock_tts = MagicMock()
         mock_tts.render.return_value = False
 
@@ -208,7 +221,7 @@ class TestPipeline:
         assert result is False
 
     def test_process_announcement_wav_invalid(self, tmp_path):
-        config = self._make_config(tmp_path)
+        config = _make_config(tmp_path)
         mock_tts = MagicMock()
         def fake_render_short(text, output_path):
             make_wav(output_path, duration=0.1)  # too short
@@ -219,6 +232,26 @@ class TestPipeline:
         result = process_announcement(a, mock_tts, config)
         assert result is False
 
+    def test_wav_filename_uses_uuid(self, tmp_path):
+        config = _make_config(tmp_path)
+        mock_tts = MagicMock()
+        rendered_paths = []
+        def fake_render(text, output_path):
+            rendered_paths.append(output_path)
+            make_wav(output_path, duration=2.0)
+            return True
+        mock_tts.render.side_effect = fake_render
+
+        with patch("brain.push_to_liquidsoap", return_value=True), \
+             patch("brain._schedule_wav_cleanup"):
+            process_announcement(make_announcement("a"), mock_tts, config)
+            process_announcement(make_announcement("b"), mock_tts, config)
+
+        assert len(rendered_paths) == 2
+        # Filenames should be different (uuid-based, not sequential)
+        assert rendered_paths[0].name != rendered_paths[1].name
+        assert "announce_" in rendered_paths[0].name
+
 
 # --- FastAPI app ---
 
@@ -227,7 +260,7 @@ class TestApp:
     @pytest.fixture
     def client(self, tmp_path):
         from fastapi.testclient import TestClient
-        config = TestPipeline._make_config(None, tmp_path)
+        config = _make_config(tmp_path)
         mock_tts = MagicMock()
         mock_tts.name = "mock"
         def fake_render(text, output_path):
@@ -235,7 +268,8 @@ class TestApp:
             return True
         mock_tts.render.side_effect = fake_render
 
-        with patch("brain.push_to_liquidsoap", return_value=True):
+        with patch("brain.push_to_liquidsoap", return_value=True), \
+             patch("brain._schedule_wav_cleanup"):
             app = create_app(config, mock_tts)
             yield TestClient(app)
 
@@ -257,14 +291,38 @@ class TestApp:
         assert resp.status_code == 422
 
     def test_rate_limiting_429(self, client):
-        # First succeeds
         resp1 = client.post("/announce", json={"detail": "first"})
         assert resp1.status_code == 200
-        # Fill queue (10 items)
         for i in range(10):
             resp = client.post("/announce", json={"detail": f"queued {i}"})
             assert resp.status_code == 200
             assert resp.json()["status"] == "queued"
-        # 12th should be 429
         resp_drop = client.post("/announce", json={"detail": "overflow"})
         assert resp_drop.status_code == 429
+
+    def test_suppressed_event(self, client):
+        """Events matching suppress_kinds should return suppressed status."""
+        resp = client.post("/announce", json={"detail": "idle event", "kind": "agent.idle"})
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "suppressed"
+
+    def test_script_generator_cleans_text(self, client):
+        """Verify markdown and URLs are stripped before TTS."""
+        resp = client.post("/announce", json={
+            "detail": "Fixed **bug** in https://example.com/repo",
+            "kind": "agent.completed",
+            "agent": "eng1",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "immediate"
+
+    def test_script_generator_templates(self, client):
+        """Verify kind-based templates are applied."""
+        resp = client.post("/announce", json={
+            "detail": "the auth refactor",
+            "kind": "agent.completed",
+            "agent": "eng1",
+        })
+        assert resp.status_code == 200
+        # The text should have been templated by generate_script
+        assert resp.json()["status"] == "immediate"

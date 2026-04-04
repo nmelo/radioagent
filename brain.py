@@ -6,7 +6,9 @@ import asyncio
 import logging
 import signal
 import socket
+import threading
 import time
+import uuid
 import wave
 from collections import deque
 from contextlib import asynccontextmanager
@@ -21,6 +23,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
 from config import RadioConfig, load_config
+from script_generator import WebhookEvent, generate_script
 from tts import TTSEngine
 from tts.kokoro_engine import KokoroEngine
 
@@ -68,22 +71,24 @@ class AnnouncementRateLimiter:
         self.last_announcement: float = 0.0
         self.queue: deque[QueuedAnnouncement] = deque(maxlen=max_queue)
         self._process_fn = None
+        self._lock = threading.Lock()
 
     def set_processor(self, fn):
         self._process_fn = fn
 
     def submit(self, announcement: QueuedAnnouncement) -> str:
         """Submit an announcement. Returns 'immediate', 'queued', or 'dropped'."""
-        now = time.time()
-        if now - self.last_announcement >= self.interval:
-            self.last_announcement = now
-            if self._process_fn:
-                self._process_fn(announcement)
-            return "immediate"
-        if len(self.queue) < self.max_queue:
-            self.queue.append(announcement)
-            return "queued"
-        return "dropped"
+        with self._lock:
+            now = time.time()
+            if now - self.last_announcement >= self.interval:
+                self.last_announcement = now
+                if self._process_fn:
+                    self._process_fn(announcement)
+                return "immediate"
+            if len(self.queue) < self.max_queue:
+                self.queue.append(announcement)
+                return "queued"
+            return "dropped"
 
     async def drain_loop(self):
         """Background task that processes queued announcements at the rate limit."""
@@ -91,19 +96,27 @@ class AnnouncementRateLimiter:
             await asyncio.sleep(1)
             if not self.queue:
                 continue
-            now = time.time()
-            if now - self.last_announcement >= self.interval:
-                announcement = self.queue.popleft()
-                self.last_announcement = now
-                if self._process_fn:
-                    self._process_fn(announcement)
+            with self._lock:
+                now = time.time()
+                if now - self.last_announcement >= self.interval:
+                    announcement = self.queue.popleft()
+                    self.last_announcement = now
+                else:
+                    continue
+            if self._process_fn:
+                self._process_fn(announcement)
 
-    def drain_remaining(self):
-        """Synchronously process all remaining queued announcements."""
-        while self.queue:
+    def drain_remaining(self, max_iterations: int = 10):
+        """Process remaining queued announcements, capped to avoid blocking."""
+        count = 0
+        while self.queue and count < max_iterations:
             announcement = self.queue.popleft()
             if self._process_fn:
                 self._process_fn(announcement)
+            count += 1
+        if self.queue:
+            logger.warning("Shutdown drain capped at %d, dropping %d remaining",
+                           max_iterations, len(self.queue))
 
 
 # --- WAV validation ---
@@ -175,19 +188,27 @@ def push_to_liquidsoap(socket_path: Path, wav_path: Path, retries: int = 3) -> b
     return False
 
 
-# --- Announcement pipeline ---
+# --- WAV cleanup ---
 
-_counter = 0
+_CLEANUP_DELAY_SECONDS = 60
+
+
+def _schedule_wav_cleanup(path: Path) -> None:
+    """Delete a WAV file after a delay, giving Liquidsoap time to read it."""
+    def _delete():
+        path.unlink(missing_ok=True)
+        logger.debug("Cleaned up %s", path.name)
+    threading.Timer(_CLEANUP_DELAY_SECONDS, _delete).start()
+
+
+# --- Announcement pipeline ---
 
 
 def process_announcement(announcement: QueuedAnnouncement, tts: TTSEngine,
                          config: RadioConfig) -> bool:
     """Full announcement pipeline: TTS -> validate -> push."""
-    global _counter
-    _counter += 1
-
     text = announcement.text
-    wav_path = WAV_DIR / f"announce_{_counter:04d}.wav"
+    wav_path = WAV_DIR / f"announce_{uuid.uuid4().hex[:12]}.wav"
 
     # Render TTS
     t0 = time.time()
@@ -204,11 +225,11 @@ def process_announcement(announcement: QueuedAnnouncement, tts: TTSEngine,
     # Push to Liquidsoap
     ok = push_to_liquidsoap(config.liquidsoap_socket, wav_path)
     if ok:
-        duration = wav_path.stat().st_size  # rough size for log
         logger.info(
             "Announced [%s] %s: '%s' (rendered in %.3fs)",
             announcement.kind, announcement.agent, text[:60], elapsed,
         )
+        _schedule_wav_cleanup(wav_path)
     else:
         logger.warning("Liquidsoap push failed, cleaning up %s", wav_path.name)
         wav_path.unlink(missing_ok=True)
@@ -246,8 +267,19 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
 
     @app.post("/announce")
     def announce(req: AnnounceRequest):
+        # Run through script generator: clean, truncate, suppress
+        event = WebhookEvent(detail=req.detail, kind=req.kind, agent=req.agent)
+        script = generate_script(
+            event,
+            suppress_kinds=config.suppress_kinds,
+            max_words=config.max_announcement_words,
+        )
+        if script is None:
+            logger.info("Suppressed [%s] from %s", req.kind, req.agent or "unknown")
+            return {"status": "suppressed"}
+
         entry = QueuedAnnouncement(
-            text=req.detail,
+            text=script,
             kind=req.kind,
             agent=req.agent,
         )
@@ -284,17 +316,14 @@ def main():
     server = uvicorn.Server(uv_config)
 
     # Graceful shutdown on SIGINT/SIGTERM
-    loop = asyncio.new_event_loop()
-
     def handle_signal(sig, frame):
         logger.info("Received %s, initiating shutdown...", signal.Signals(sig).name)
-        loop.call_soon_threadsafe(server.should_exit.__bool__)
         server.should_exit = True
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    loop.run_until_complete(server.serve())
+    asyncio.run(server.serve())
 
 
 if __name__ == "__main__":
