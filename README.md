@@ -1,4 +1,4 @@
-# Agent Radio
+# Radio Agent
 
 Inspired by [WRIT-FM](https://github.com/keltokhy/writ-fm), a 24/7 AI-powered internet radio station.
 
@@ -13,16 +13,16 @@ https://github.com/user-attachments/assets/5dd0feb8-326b-4537-976c-0bda534da10d
 ### Docker (all platforms)
 
 ```bash
-git clone https://github.com/nmelo/agent-radio.git
-cd agent-radio
+git clone https://github.com/nmelo/radioagent.git
+cd radioagent
 docker compose up
 ```
 
 ### Linux bare-metal
 
 ```bash
-git clone https://github.com/nmelo/agent-radio.git
-cd agent-radio
+git clone https://github.com/nmelo/radioagent.git
+cd radioagent
 ./install.sh
 ```
 
@@ -33,7 +33,7 @@ Send an announcement:
 ```bash
 curl -X POST http://localhost:8001/announce \
   -H 'Content-Type: application/json' \
-  -d '{"detail":"Hello from Agent Radio"}'
+  -d '{"detail":"Hello from Radio Agent"}'
 ```
 
 ## Three audio channels
@@ -66,7 +66,7 @@ Two processes. Brain handles webhooks, TTS, and pushes WAV paths to Liquidsoap v
 
 ## DJ Skill
 
-Agent Radio ships with a Claude Code skill that transforms robotic announcements into creative radio callouts. Install it and your agents become DJs.
+Radio Agent ships with a Claude Code skill that transforms robotic announcements into creative radio callouts. Install it and your agents become DJs.
 
 ```bash
 # Download from the dashboard or copy from skills/dj/
