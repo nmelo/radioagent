@@ -494,6 +494,7 @@ body::after {
   var muteBtn = document.getElementById('muteBtn');
   var muteIcon = document.getElementById('muteIcon');
   var npMuted = document.getElementById('npMuted');
+  var upNext = document.getElementById('upNext');
 
   // SVG markup for play/pause icons (static, no user content)
   var PLAY_PATH = '<polygon points="6,3 20,12 6,21"/>';
@@ -676,6 +677,16 @@ body::after {
       if (data.album) parts.push(data.album);
       npMeta.textContent = parts.join(' \u2014 ');
       if (typeof data.muted === 'boolean') setMuteState(data.muted);
+      if (data.next) {
+        var nextParts = [data.next.title];
+        if (data.next.artist) nextParts.push(data.next.artist);
+        upNext.textContent = nextParts.join(' \u2014 ');
+      } else {
+        upNext.textContent = '';
+        var em = document.createElement('em');
+        em.textContent = 'Shuffling...';
+        upNext.appendChild(em);
+      }
     }).catch(function() {});
   }
 
