@@ -19,6 +19,7 @@ html { font-size: 130%; }
   --amber-glow: rgba(232, 163, 23, 0.15);
   --cyan: #22D3EE;
   --red: #EF4444;
+  --green: #22C55E;
   --text: #D4D4D4;
   --text-dim: #737373;
   --font-serif: 'Instrument Serif', serif;
@@ -220,6 +221,10 @@ body::after {
 
 .wire-item.failure {
   border-left-color: var(--red);
+}
+
+.wire-item.success {
+  border-left-color: var(--green);
 }
 
 .wire-item-text {
@@ -773,8 +778,11 @@ body::after {
     }
   }
 
-  function isFailureKind(kind) {
-    return kind && (kind.indexOf('failed') !== -1 || kind.indexOf('stuck') !== -1);
+  function wireItemSentiment(kind) {
+    if (!kind) return '';
+    if (kind.indexOf('failed') !== -1 || kind.indexOf('stuck') !== -1) return 'failure';
+    if (kind.indexOf('completed') !== -1 || kind.indexOf('deploy') === 0 || kind.indexOf('milestone') === 0) return 'success';
+    return '';
   }
 
   // --- State Machine ---
@@ -1047,7 +1055,8 @@ body::after {
     wireEmpty.style.display = 'none';
 
     var item = document.createElement('div');
-    item.className = 'wire-item' + (isFailureKind(announcement.kind) ? ' failure' : '');
+    var sentiment = wireItemSentiment(announcement.kind);
+    item.className = 'wire-item' + (sentiment ? ' ' + sentiment : '');
 
     var textEl = document.createElement('div');
     textEl.className = 'wire-item-text';
