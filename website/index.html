@@ -765,15 +765,21 @@ footer a:hover {
 
 <script>
 function copySetup() {
-  var text = 'To use Radio Agent with your coding agents:\n\n' +
-    '1. Install Radio Agent (if you haven\'t already):\n' +
-    '   curl -sSL https://radioagent.live/install.sh | bash\n\n' +
-    '2. Install the agent skills:\n' +
-    '   git clone https://github.com/nmelo/radioagent.git /tmp/radioagent-skills\n' +
-    '   cp -r /tmp/radioagent-skills/skills/setup ~/.claude/skills/radioagent-setup\n' +
-    '   cp -r /tmp/radioagent-skills/skills/dj ~/.claude/skills/dj\n\n' +
-    '3. Tell your agent: run /radioagent-setup\n' +
-    '   It will ask for your Radio Agent host and configure everything.';
+  var text = 'You are setting up Radio Agent, an ambient audio awareness system for AI coding sessions. It plays music and announces agent activity via voice over an Icecast stream.\n\n' +
+    'STEP 1: Install the Radio Agent skills\n' +
+    'Run these commands to install two Claude Code skills:\n\n' +
+    'git clone https://github.com/nmelo/radioagent.git /tmp/radioagent-skills\n' +
+    'cp -r /tmp/radioagent-skills/skills/setup ~/.claude/skills/radioagent-setup\n' +
+    'cp -r /tmp/radioagent-skills/skills/dj ~/.claude/skills/dj\n' +
+    'rm -rf /tmp/radioagent-skills\n\n' +
+    'STEP 2: Run the setup skill\n' +
+    'Invoke /radioagent-setup now. It will ask the user for their Radio Agent host and port (the machine running the Radio Agent server), then configure initech.yaml so you can send announcements.\n\n' +
+    'STEP 3: Start using Radio Agent\n' +
+    'After setup, use the /dj skill whenever you need to announce something. It will rewrite your announcement in a creative radio DJ style and send it to the stream via initech announce. Use event kinds for automatic tone routing:\n' +
+    '- initech announce --kind agent.completed "work finished"\n' +
+    '- initech announce --kind agent.failed "something broke"\n' +
+    '- initech announce --kind agent.started "picking up a task"\n\n' +
+    'The DJ skill also teaches you when and how often to announce. Read its SKILL.md for the full ambient narration protocol.';
   var btn = document.getElementById('copySetupBtn');
   navigator.clipboard.writeText(text).then(function() {
     var original = btn.textContent;
