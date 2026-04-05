@@ -1,0 +1,27 @@
+# Brain config for Docker deployment.
+# Paths and hostnames adjusted for Docker service names and volume mounts.
+
+music_dir: /music
+music_ai_enabled: false
+music_ai_prompt: "calm ambient music, soft pads, gentle drone, deep reverb"
+
+tts_engine: kokoro
+tts_voice: af_heart
+tts_speed: 1.0
+
+webhook_port: 8001
+webhook_rate_limit: 10
+
+liquidsoap_socket: /tmp/agent-radio/liquidsoap.sock
+
+icecast_host: icecast
+icecast_port: 8000
+icecast_mount: /stream
+icecast_password: agent-radio-src
+
+tones_dir: /tones
+
+suppress_kinds:
+  - "*.idle"
+  - "*.message"
+max_announcement_words: 40

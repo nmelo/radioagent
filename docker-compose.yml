@@ -1,0 +1,67 @@
+# Agent Radio - Docker Compose
+#
+# CPU (default):  docker compose up
+# GPU (Kokoro):   COMPOSE_PROFILES=gpu docker compose up
+
+x-brain: &brain-base
+  build:
+    context: .
+    dockerfile: Dockerfile.brain
+  ports:
+    - "8001:8001"
+  volumes:
+    - shared:/tmp/agent-radio
+    - ./docker/config.yaml:/app/config.yaml:ro
+    - ${TONES_DIR:-./tones}:/tones:ro
+  depends_on:
+    icecast:
+      condition: service_healthy
+    liquidsoap:
+      condition: service_started
+  restart: unless-stopped
+
+services:
+  icecast:
+    build:
+      context: .
+      dockerfile: Dockerfile.icecast
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/status-json.xsl || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  liquidsoap:
+    image: savonet/liquidsoap:v2.3.2
+    volumes:
+      - ./docker/radio.liq:/radio.liq:ro
+      - shared:/tmp/agent-radio
+      - ${MUSIC_DIR:-./music}:/music:ro
+    command: ["liquidsoap", "/radio.liq"]
+    depends_on:
+      icecast:
+        condition: service_healthy
+    restart: unless-stopped
+
+  brain:
+    <<: *brain-base
+    profiles:
+      - cpu
+
+  brain-gpu:
+    <<: *brain-base
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    profiles:
+      - gpu
+
+volumes:
+  shared:
