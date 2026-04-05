@@ -58,8 +58,8 @@ def test_missing_config_file(tmp_path):
 def test_music_dir_does_not_exist(tmp_path):
     p = tmp_path / "config.yaml"
     p.write_text("music_dir: /no/such/directory\n")
-    with pytest.raises(ValueError, match="music_dir does not exist"):
-        load_config(p)
+    config = load_config(p)
+    assert str(config.music_dir) == "/no/such/directory"
 
 
 def test_invalid_webhook_port(tmp_path, music_dir):

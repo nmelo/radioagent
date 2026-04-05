@@ -70,7 +70,7 @@ def load_config(path: str | Path = "config.yaml") -> RadioConfig:
     """Load and validate config from a YAML file.
 
     Raises FileNotFoundError if the file doesn't exist.
-    Raises ValueError if validation fails (bad port, missing music_dir).
+    Raises ValueError if validation fails (bad port).
     """
     path = Path(path)
     if not path.exists():
@@ -97,11 +97,10 @@ def load_config(path: str | Path = "config.yaml") -> RadioConfig:
     _validate_port(config.webhook_port, "webhook_port")
     _validate_port(config.icecast_port, "icecast_port")
 
-    # Validate music_dir exists
+    # Warn if music_dir is missing or empty (liquidsoap owns playback, not brain)
     if not config.music_dir.exists():
-        raise ValueError(f"music_dir does not exist: {config.music_dir.resolve()}")
-
-    if config.music_dir.exists() and not any(config.music_dir.iterdir()):
+        logger.warning("music_dir does not exist: %s", config.music_dir.resolve())
+    elif not any(config.music_dir.iterdir()):
         logger.warning("music_dir is empty: %s", config.music_dir)
 
     # Validate suppress_kinds globs
