@@ -1161,7 +1161,7 @@ body::after {
   function fetchNowPlaying() {
     fetch('/now-playing').then(function(r) { return r.json(); }).then(function(data) {
       updateNowPlaying(data);
-      document.title = data.title ? 'RadioAgent: ' + data.title : 'RadioAgent';
+      document.title = data.title ? 'RadioAgent: ' + data.title + (data.artist ? ' - ' + data.artist : '') : 'RadioAgent';
       if (typeof data.muted === 'boolean') state.musicPlaying = !data.muted;
       if (typeof data.announcements_muted === 'boolean') state.announcementsOn = !data.announcements_muted;
       if (typeof data.tones_muted === 'boolean') state.tonesOn = !data.tones_muted;
