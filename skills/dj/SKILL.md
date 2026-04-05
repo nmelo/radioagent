@@ -106,12 +106,13 @@ Use sparingly. Most announcements don't need it. Good for period transitions and
 
 ## Station IDs
 
-Inject one every 10-15 announcements or on period transitions. 5-10 words max.
+The station call sign is KXYZ. Inject a station ID every 10-15 announcements or on period transitions. 5-10 words max. Have fun with it.
 
-- "Agent Radio. Still transmitting."
-- "You're listening to Agent Radio."
-- "Agent Radio. The frequency of the build."
-- "Still here. Still building."
+- "KXYZ. The voice of your agents."
+- "You're listening to KXYZ."
+- "KXYZ. Still transmitting."
+- "This is KXYZ. Still building."
+- "KXYZ. Where the code meets the airwaves."
 
 ## Ambient Tones
 
