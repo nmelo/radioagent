@@ -17,27 +17,31 @@ from script_generator import (
 class TestTemplateCompleted:
     def test_completed_with_agent(self):
         event = WebhookEvent(kind="task.completed", agent="eng1", detail="auth refactor")
-        assert generate_script(event) == "eng1 finished: auth refactor"
+        assert generate_script(event) == "Completed: auth refactor"
 
     def test_completed_without_agent(self):
         event = WebhookEvent(kind="task.completed", detail="auth refactor")
         assert generate_script(event) == "Completed: auth refactor"
 
+    def test_agent_not_in_text(self):
+        event = WebhookEvent(kind="task.completed", agent="eng1", detail="auth refactor")
+        assert "eng1" not in generate_script(event)
+
 
 class TestTemplateFailed:
     def test_failed_with_agent(self):
         event = WebhookEvent(kind="build.failed", agent="eng1", detail="tests broken")
-        assert generate_script(event) == "Heads up. eng1 hit a failure: tests broken"
+        assert generate_script(event) == "Heads up, failure: tests broken"
 
     def test_failed_without_agent(self):
         event = WebhookEvent(kind="build.failed", detail="tests broken")
-        assert generate_script(event) == "Failure: tests broken"
+        assert generate_script(event) == "Heads up, failure: tests broken"
 
 
 class TestTemplateStuck:
     def test_stuck_with_agent(self):
         event = WebhookEvent(kind="agent.stuck", agent="eng2", detail="waiting on API")
-        assert generate_script(event) == "eng2 appears stuck. waiting on API"
+        assert generate_script(event) == "Something is stuck. waiting on API"
 
     def test_stuck_without_agent(self):
         event = WebhookEvent(kind="agent.stuck", detail="waiting on API")
@@ -47,7 +51,7 @@ class TestTemplateStuck:
 class TestTemplateStarted:
     def test_started_with_agent(self):
         event = WebhookEvent(kind="agent.started", agent="eng1")
-        assert generate_script(event) == "eng1 started working"
+        assert generate_script(event) == "Work started"
 
     def test_started_without_agent(self):
         event = WebhookEvent(kind="agent.started")
@@ -57,7 +61,7 @@ class TestTemplateStarted:
 class TestTemplateStopped:
     def test_stopped_with_agent(self):
         event = WebhookEvent(kind="agent.stopped", agent="eng1")
-        assert generate_script(event) == "eng1 stopped"
+        assert generate_script(event) == "Work stopped"
 
     def test_stopped_without_agent(self):
         event = WebhookEvent(kind="agent.stopped")
@@ -67,7 +71,7 @@ class TestTemplateStopped:
 class TestTemplateDefault:
     def test_default_with_agent(self):
         event = WebhookEvent(kind="custom.event", agent="pm", detail="standup in 5")
-        assert generate_script(event) == "pm: standup in 5"
+        assert generate_script(event) == "standup in 5"
 
     def test_default_without_agent(self):
         event = WebhookEvent(kind="custom.event", detail="standup in 5")
@@ -75,7 +79,7 @@ class TestTemplateDefault:
 
     def test_empty_kind_treated_as_default(self):
         event = WebhookEvent(kind="", agent="eng1", detail="hello world")
-        assert generate_script(event) == "eng1: hello world"
+        assert generate_script(event) == "hello world"
 
     def test_empty_kind_no_agent_no_detail_returns_none(self):
         event = WebhookEvent(kind="", detail="")
@@ -220,7 +224,7 @@ class TestGenerateScriptIntegration:
             detail="Fixed **auth** bug in `login.py`",
         )
         result = generate_script(event)
-        assert result == "eng1 finished: Fixed auth bug in"
+        assert result == "Completed: Fixed auth bug in"
 
     def test_url_stripped_in_detail(self):
         event = WebhookEvent(
@@ -228,7 +232,7 @@ class TestGenerateScriptIntegration:
             detail="See https://ci.example.com/build/123 for logs",
         )
         result = generate_script(event)
-        assert result == "Failure: See for logs"
+        assert result == "Heads up, failure: See for logs"
 
     def test_long_hash_truncated(self):
         event = WebhookEvent(

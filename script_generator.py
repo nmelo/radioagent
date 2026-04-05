@@ -123,32 +123,22 @@ def generate_script(
         kind = "custom"
 
     # Template selection by kind suffix
+    # Agent name is preserved in the webhook JSON/SSE event data but
+    # excluded from the spoken text to avoid robotic-sounding prefixes.
     if kind.endswith(".completed"):
-        if agent:
-            return f"{agent} finished: {detail}"
-        return f"Completed: {detail}"
+        return f"Completed: {detail}" if detail else "Completed"
 
     if kind.endswith(".failed"):
-        if agent:
-            return f"Heads up. {agent} hit a failure: {detail}"
-        return f"Failure: {detail}"
+        return f"Heads up, failure: {detail}" if detail else "Failure reported"
 
     if kind.endswith(".stuck"):
-        if agent:
-            return f"{agent} appears stuck. {detail}"
-        return f"Something is stuck. {detail}"
+        return f"Something is stuck. {detail}" if detail else "Something is stuck"
 
     if kind.endswith(".started"):
-        if agent:
-            return f"{agent} started working"
         return "Work started"
 
     if kind.endswith(".stopped"):
-        if agent:
-            return f"{agent} stopped"
         return "Work stopped"
 
     # Default: detail verbatim (cleaned and truncated)
-    if agent:
-        return f"{agent}: {detail}"
     return detail if detail else None
