@@ -31,7 +31,9 @@ venv/bin/python brain.py &
 ```
 
 Listen: `http://<host>:8000/stream`
+
 Dashboard: `http://<host>:8001/`
+
 Announce: `curl -X POST http://<host>:8001/announce -H 'Content-Type: application/json' -d '{"detail":"Hello from Agent Radio"}'`
 
 ## Architecture
