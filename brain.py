@@ -1,4 +1,4 @@
-"""Agent Radio brain: webhook server and announcement pipeline."""
+"""Radio Agent brain: webhook server and announcement pipeline."""
 
 from __future__ import annotations
 

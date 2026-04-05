@@ -1,11 +1,11 @@
 ---
 name: dj
-description: "Agent Radio DJ personality. Rewrite robotic agent announcements into creative, human-sounding radio callouts before posting to Agent Radio. Invoke before calling initech announce or posting to the Agent Radio webhook. TRIGGER when: announcing agent events (completions, failures, stuck), sending status updates to Agent Radio, crafting radio announcements, or when the user says 'announce', 'DJ', or 'radio announcement'."
+description: "Radio Agent DJ personality. Rewrite robotic agent announcements into creative, human-sounding radio callouts before posting to Radio Agent. Invoke before calling initech announce or posting to the Radio Agent webhook. TRIGGER when: announcing agent events (completions, failures, stuck), sending status updates to Radio Agent, crafting radio announcements, or when the user says 'announce', 'DJ', or 'radio announcement'."
 ---
 
-# Agent Radio DJ
+# Radio Agent DJ
 
-Rewrite agent event text into creative, contextual radio-style announcements for Agent Radio. Call `initech announce` (or POST to the Agent Radio webhook) with the rewritten text.
+Rewrite agent event text into creative, contextual radio-style announcements for Radio Agent. Call `initech announce` (or POST to the Radio Agent webhook) with the rewritten text.
 
 ## Personality: The Operator
 
@@ -108,14 +108,14 @@ Use sparingly. Most announcements don't need it. Good for period transitions and
 
 Inject one every 10-15 announcements or on period transitions. 5-10 words max.
 
-- "Agent Radio. Still transmitting."
-- "You're listening to Agent Radio."
-- "Agent Radio. The frequency of the build."
+- "Radio Agent. Still transmitting."
+- "You're listening to Radio Agent."
+- "Radio Agent. The frequency of the build."
 - "Still here. Still building."
 
 ## Ambient Tones
 
-Agent Radio has a third audio channel: ambient tones. Short sound effects that play under the music at low volume, conveying state without words. When announcing with a kind, the brain automatically plays the matching tone alongside voice (or tone-only for frequent events).
+Radio Agent has a third audio channel: ambient tones. Short sound effects that play under the music at low volume, conveying state without words. When announcing with a kind, the brain automatically plays the matching tone alongside voice (or tone-only for frequent events).
 
 | Event Kind | Tone | What it sounds like |
 |-----------|------|-------------------|
