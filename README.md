@@ -46,6 +46,8 @@ curl -X POST http://localhost:8001/announce \
 
 Music sits in the background. Voice announcements duck the music and pull your attention briefly. Tones give you a sense of agent activity without words. After a day of listening, you stop consciously hearing the tones but you know when agents are busy.
 
+Designed around [calm technology](https://calmtech.com/papers/coming-age-calm-technology) principles: information moves between periphery and center, the user controls the transition, and the system disappears into the background when not needed.
+
 ## Architecture
 
 ```
