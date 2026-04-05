@@ -236,6 +236,36 @@ section {
   color: var(--text-dim);
 }
 
+.hero-cta code {
+  position: relative;
+  padding-right: 44px;
+}
+
+.code-copy {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 3px;
+  transition: color 0.2s, background 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.code-copy:hover {
+  color: var(--amber);
+  background: rgba(232, 163, 23, 0.1);
+}
+
+.code-copy.copied {
+  color: #4ADE80;
+}
+
 .hero-screenshot {
   margin-top: 48px;
   position: relative;
@@ -565,7 +595,7 @@ footer a:hover {
   <h1 class="hero-headline">Hear your build.<br><em>Don't watch it.</em></h1>
   <p class="hero-sub">A radio station for AI coding sessions. Ambient music plays continuously. When your agents finish work, hit failures, or pick up new tasks, a voice announces it over the stream. Peripheral awareness without a screen.</p>
   <div class="hero-cta">
-    <code>curl -sSL https://radioagent.live/install.sh | bash</code>
+    <code>curl -sSL https://radioagent.live/install.sh | bash<button class="code-copy" id="curlCopyBtn" onclick="copyCurl()" aria-label="Copy command"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></code>
   </div>
   <div class="hero-screenshot">
     <img src="assets/dashboard.png" alt="Radio Agent dashboard showing now playing, wire feed with typing animation, and player controls" loading="lazy">
@@ -751,6 +781,13 @@ function copySetup() {
       btn.textContent = original;
       btn.classList.remove('copied');
     }, 2000);
+  });
+}
+function copyCurl() {
+  var btn = document.getElementById('curlCopyBtn');
+  navigator.clipboard.writeText('curl -sSL https://radioagent.live/install.sh | bash').then(function() {
+    btn.classList.add('copied');
+    setTimeout(function() { btn.classList.remove('copied'); }, 2000);
   });
 }
 </script>
