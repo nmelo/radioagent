@@ -701,7 +701,7 @@ body::after {
         <div class="text-only-indicator" id="textOnlyIndicator" style="display:none">text only</div>
       </div>
       <div class="channel">
-        <div class="channel-label" id="tonesLabel">TONES</div>
+        <div class="channel-label" id="tonesLabel">TONES <button class="help-btn" id="tonesHelpBtn" aria-label="About Tones">?</button></div>
         <div class="channel-controls">
           <button class="channel-toggle" id="tonesToggle" aria-label="Toggle tones"></button>
         </div>
@@ -731,6 +731,25 @@ body::after {
       <li>Tone-aware: adapts voice for completions (satisfied), failures (calm alert), stuck (patient), and milestones (momentous)</li>
       <li>Works with any TTS voice. Keeps announcements concise, never pads short messages, never uses exclamation points</li>
     </ul>
+  </div>
+</div>
+
+<div class="modal-overlay" id="tonesModal">
+  <div class="modal">
+    <button class="modal-close" id="tonesModalClose">x</button>
+    <div class="modal-title">AMBIENT TONES</div>
+    <div class="modal-text" style="margin-bottom: 12px">Subtle sound effects that play under the music, giving you a sense of what agents are doing without words.</div>
+    <ul class="modal-text">
+      <li>Rising chime: agent started work</li>
+      <li>Warm chord: work completed</li>
+      <li>Tense note: something failed</li>
+      <li>Low pulse: agent is stuck</li>
+      <li>Soft hum: agent idle</li>
+      <li>Falling notes: agent stopped</li>
+      <li>Bright bell: deploy event</li>
+      <li>Long chord: milestone reached</li>
+    </ul>
+    <div class="modal-text" style="margin-top: 12px; color: var(--text-dim)">Tones that signal problems (failed, stuck) also play a voice announcement. Start, stop, and idle are tone-only.</div>
   </div>
 </div>
 
@@ -909,7 +928,7 @@ body::after {
         musicToggle.classList.remove('loading');
         updateUI();
         musicToggle.disabled = false;
-      }, 2000);
+      }, 3000);
     }).catch(function() {
       musicToggle.classList.remove('loading');
       updateUI();
@@ -977,8 +996,10 @@ body::after {
 
     // Music channel
     musicLabel.style.color = (!state.connected || !state.musicPlaying) ? 'var(--text-dim)' : '';
-    // Safe: only static SVG icon constants, no user content
-    musicToggle.innerHTML = state.musicPlaying ? ICON_PAUSE + ' PAUSE' : ICON_PLAY + ' PLAY';
+    if (!musicToggle.classList.contains('loading')) {
+      // Safe: only static SVG icon constants, no user content
+      musicToggle.innerHTML = state.musicPlaying ? ICON_PAUSE + ' PAUSE' : ICON_PLAY + ' PLAY';
+    }
     musicToggle.classList.toggle('active', state.musicPlaying);
     musicToggle.setAttribute('aria-label', state.musicPlaying ? 'Pause music' : 'Play music');
 
@@ -1250,6 +1271,24 @@ body::after {
 
   djModal.addEventListener('click', function(e) {
     if (e.target === djModal) djModal.classList.remove('visible');
+  });
+
+  // --- Tones Help Modal ---
+
+  var tonesModal = document.getElementById('tonesModal');
+  var tonesHelpBtn = document.getElementById('tonesHelpBtn');
+  var tonesModalClose = document.getElementById('tonesModalClose');
+
+  tonesHelpBtn.addEventListener('click', function() {
+    tonesModal.classList.add('visible');
+  });
+
+  tonesModalClose.addEventListener('click', function() {
+    tonesModal.classList.remove('visible');
+  });
+
+  tonesModal.addEventListener('click', function(e) {
+    if (e.target === tonesModal) tonesModal.classList.remove('visible');
   });
 
   // --- Init ---
