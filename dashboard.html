@@ -6,7 +6,7 @@
 <title>Agent Radio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Instrument+Serif:ital@0;1&family=Tilt+Neon&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 130%; }
@@ -82,8 +82,7 @@ body::after {
 }
 
 .header-brand {
-  font-family: var(--font-serif);
-  font-style: italic;
+  font-family: 'Tilt Neon', sans-serif;
   font-size: 1.5rem;
   color: #FFF5E0;
   letter-spacing: 0.02em;
@@ -673,9 +672,14 @@ body::after {
   .header-brand { font-size: 1.2rem; }
   .now-playing-title { font-size: 1.2rem; }
   .volume-slider { width: 60px; }
-  .channels-panel { grid-template-columns: 1fr; }
-  .channel { border-right: none !important; border-bottom: 1px solid rgba(232, 163, 23, 0.05); }
-  .channel:last-child { border-bottom: none; }
+  .channels-panel { grid-template-columns: 1fr 1fr 1fr; }
+  .channel { padding: 8px 6px; }
+  .channel-label { font-size: 0.55rem; letter-spacing: 0.1em; margin-bottom: 6px; }
+  .channel-toggle { font-size: 0; padding: 6px 10px; gap: 0; }
+  .channel-toggle svg { width: 16px; height: 16px; }
+  .channel-controls { gap: 4px; }
+  .skip-btn { display: none; }
+  #tonesHelpBtn { display: none; }
   .footer-link, #djHelpBtn { display: none; }
 }
 </style>
