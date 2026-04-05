@@ -17,10 +17,12 @@ SAMPLE_RATE = 24000
 class KokoroEngine:
     """Wraps Kokoro KPipeline behind the TTSEngine protocol."""
 
-    def __init__(self, voice: str = "am_michael", speed: float = 1.0):
+    def __init__(self, voice: str = "am_michael", speed: float = 1.0,
+                 extra_voices: list[str] | None = None):
         self._voice = voice
         self._speed = speed
         self._pipeline = None
+        self._extra_voices = extra_voices or []
         self._load()
 
     def _load(self) -> None:
@@ -30,16 +32,23 @@ class KokoroEngine:
             logger.info("Loading Kokoro TTS model...")
             t0 = time.time()
             self._pipeline = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
-            # Warm up: first synthesis triggers model load + CUDA kernel JIT
+            # Warm up default voice: triggers model load + CUDA kernel JIT
             for _ in self._pipeline("warm up", voice=self._voice):
                 pass
-            logger.info("Kokoro ready in %.1fs", time.time() - t0)
+            # Warm up extra voices so first use has no latency hit
+            for v in self._extra_voices:
+                if v != self._voice:
+                    for _ in self._pipeline("warm up", voice=v):
+                        pass
+                    logger.info("Warmed up voice: %s", v)
+            logger.info("Kokoro ready in %.1fs (%d voices)", time.time() - t0,
+                        1 + len([v for v in self._extra_voices if v != self._voice]))
         except ImportError:
             logger.error("Kokoro not installed. pip install kokoro>=0.9")
         except Exception:
             logger.exception("Failed to load Kokoro model")
 
-    def render(self, text: str, output_path: Path) -> bool:
+    def render(self, text: str, output_path: Path, voice: str | None = None) -> bool:
         """Render text to a WAV file. Returns True on success."""
         if not text or not text.strip():
             logger.warning("Empty text, skipping TTS render")
@@ -51,10 +60,11 @@ class KokoroEngine:
 
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
+            use_voice = voice or self._voice
 
             chunks = []
             for _, _, audio in self._pipeline(
-                text, voice=self._voice, speed=self._speed
+                text, voice=use_voice, speed=self._speed
             ):
                 chunks.append(audio)
 

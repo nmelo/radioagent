@@ -12,6 +12,7 @@ import pytest
 from brain import (
     AnnouncementRateLimiter,
     AnnounceRequest,
+    FAILURE_VOICE,
     QueuedAnnouncement,
     validate_wav,
     process_announcement,
@@ -19,6 +20,7 @@ from brain import (
     get_now_playing_from_icecast,
     get_next_track,
     get_tone_for_kind,
+    get_voice_for_kind,
     is_tone_only,
     push_tone_to_liquidsoap,
     query_liquidsoap,
@@ -211,7 +213,7 @@ class TestPipeline:
         config = _make_config(tmp_path)
 
         mock_tts = MagicMock()
-        def fake_render(text, output_path):
+        def fake_render(text, output_path, voice=None):
             make_wav(output_path, duration=2.0)
             return True
         mock_tts.render.side_effect = fake_render
@@ -236,7 +238,7 @@ class TestPipeline:
     def test_process_announcement_wav_invalid(self, tmp_path):
         config = _make_config(tmp_path)
         mock_tts = MagicMock()
-        def fake_render_short(text, output_path):
+        def fake_render_short(text, output_path, voice=None):
             make_wav(output_path, duration=0.1)  # too short
             return True
         mock_tts.render.side_effect = fake_render_short
@@ -249,7 +251,7 @@ class TestPipeline:
         config = _make_config(tmp_path)
         mock_tts = MagicMock()
         rendered_paths = []
-        def fake_render(text, output_path):
+        def fake_render(text, output_path, voice=None):
             rendered_paths.append(output_path)
             make_wav(output_path, duration=2.0)
             return True
@@ -276,7 +278,7 @@ class TestApp:
         config = _make_config(tmp_path)
         mock_tts = MagicMock()
         mock_tts.name = "mock"
-        def fake_render(text, output_path):
+        def fake_render(text, output_path, voice=None):
             make_wav(output_path, duration=2.0)
             return True
         mock_tts.render.side_effect = fake_render
@@ -549,7 +551,7 @@ class TestToneApp:
         config = _make_config(tmp_path)
         mock_tts = MagicMock()
         mock_tts.name = "mock"
-        def fake_render(text, output_path):
+        def fake_render(text, output_path, voice=None):
             make_wav(output_path, duration=2.0)
             return True
         mock_tts.render.side_effect = fake_render
@@ -628,3 +630,63 @@ class TestToneApp:
         })
         assert resp.status_code == 200
         assert resp.json()["status"] == "immediate"
+
+
+# --- Voice selection ---
+
+
+class TestVoiceSelection:
+    def test_failed_uses_failure_voice(self):
+        assert get_voice_for_kind("agent.failed", "af_heart") == FAILURE_VOICE
+
+    def test_stuck_uses_failure_voice(self):
+        assert get_voice_for_kind("agent.stuck", "af_heart") == FAILURE_VOICE
+
+    def test_completed_uses_default(self):
+        assert get_voice_for_kind("agent.completed", "af_heart") == "af_heart"
+
+    def test_custom_uses_default(self):
+        assert get_voice_for_kind("custom", "af_heart") == "af_heart"
+
+    def test_deploy_uses_default(self):
+        assert get_voice_for_kind("deploy.production", "af_heart") == "af_heart"
+
+
+class TestVoiceInPipeline:
+    @pytest.fixture
+    def client(self, tmp_path):
+        from fastapi.testclient import TestClient
+        config = _make_config(tmp_path)
+        config.tts_voice = "af_heart"
+        mock_tts = MagicMock()
+        mock_tts.name = "mock"
+        def fake_render(text, output_path, voice=None):
+            make_wav(output_path, duration=2.0)
+            return True
+        mock_tts.render.side_effect = fake_render
+
+        with patch("brain.push_to_liquidsoap", return_value=True), \
+             patch("brain.push_tone_to_liquidsoap", return_value=True), \
+             patch("brain._schedule_wav_cleanup"):
+            app = create_app(config, mock_tts)
+            yield TestClient(app), mock_tts
+
+    def test_failed_announcement_uses_male_voice(self, client):
+        """agent.failed should render with am_michael voice."""
+        tc, mock_tts = client
+        tc.post("/announce", json={
+            "detail": "build failed", "kind": "agent.failed", "agent": "eng1",
+        })
+        mock_tts.render.assert_called_once()
+        _, kwargs = mock_tts.render.call_args
+        assert kwargs.get("voice") == FAILURE_VOICE
+
+    def test_completed_announcement_uses_default_voice(self, client):
+        """agent.completed should render with default voice (af_heart)."""
+        tc, mock_tts = client
+        tc.post("/announce", json={
+            "detail": "task done", "kind": "agent.completed", "agent": "eng1",
+        })
+        mock_tts.render.assert_called_once()
+        _, kwargs = mock_tts.render.call_args
+        assert kwargs.get("voice") == "af_heart"
