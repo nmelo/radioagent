@@ -380,6 +380,37 @@ body::after {
   border: none;
 }
 
+.mute-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--amber);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s;
+}
+
+.mute-btn:hover { background: var(--amber-glow); }
+.mute-btn svg { width: 18px; height: 18px; fill: var(--amber); }
+.mute-btn.muted svg { fill: var(--red); }
+
+.now-playing-muted {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--red);
+  margin-top: 6px;
+  display: none;
+}
+.now-playing-muted.visible { display: block; }
+
 @media (max-width: 480px) {
   .header-brand { font-size: 1.2rem; }
   .now-playing-title { font-size: 1.2rem; }
@@ -406,6 +437,7 @@ body::after {
     </div>
     <div class="now-playing-title" id="npTitle">Waiting for signal...</div>
     <div class="now-playing-meta" id="npMeta"></div>
+    <div class="now-playing-muted" id="npMuted">MUSIC MUTED</div>
   </section>
 
   <section class="panel">
@@ -433,6 +465,9 @@ body::after {
     <div class="player-status disconnected" id="playerStatus">Disconnected</div>
   </div>
   <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="70" aria-label="Volume">
+  <button class="mute-btn" id="muteBtn" aria-label="Mute music">
+    <svg viewBox="0 0 24 24" id="muteIcon"><path d="M3 9v6h4l5 5V4L7 9H3z"/><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/><path d="M19 12c0 2.97-1.65 5.54-4 6.71v2.06c3.45-1.33 6-4.85 6-8.77s-2.55-7.44-6-8.77v2.06c2.35 1.17 4 3.74 4 6.71z"/></svg>
+  </button>
 </div>
 
 <script>
@@ -456,10 +491,17 @@ body::after {
   var playIcon = document.getElementById('playIcon');
   var playerStatus = document.getElementById('playerStatus');
   var volumeSlider = document.getElementById('volumeSlider');
+  var muteBtn = document.getElementById('muteBtn');
+  var muteIcon = document.getElementById('muteIcon');
+  var npMuted = document.getElementById('npMuted');
 
   // SVG markup for play/pause icons (static, no user content)
   var PLAY_PATH = '<polygon points="6,3 20,12 6,21"/>';
   var PAUSE_PATH = '<rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/>';
+
+  // SVG markup for speaker icons (static, no user content)
+  var SPEAKER_ON = '<path d="M3 9v6h4l5 5V4L7 9H3z"/><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/><path d="M19 12c0 2.97-1.65 5.54-4 6.71v2.06c3.45-1.33 6-4.85 6-8.77s-2.55-7.44-6-8.77v2.06c2.35 1.17 4 3.74 4 6.71z"/>';
+  var SPEAKER_OFF = '<path d="M3 9v6h4l5 5V4L7 9H3z"/><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/><line x1="22" y1="4" x2="14" y2="20" stroke="currentColor" stroke-width="2"/>';
 
   // --- Utilities ---
 
@@ -578,6 +620,31 @@ body::after {
     if (audio) audio.volume = this.value / 100;
   });
 
+  // --- Mute Toggle ---
+
+  var isMuted = false;
+
+  function setMuteState(muted) {
+    isMuted = muted;
+    // Safe: only static SVG constants, no user content
+    muteIcon.innerHTML = muted ? SPEAKER_OFF : SPEAKER_ON;
+    muteBtn.classList.toggle('muted', muted);
+    muteBtn.setAttribute('aria-label', muted ? 'Unmute music' : 'Mute music');
+    npMuted.classList.toggle('visible', muted);
+  }
+
+  muteBtn.addEventListener('click', function() {
+    var endpoint = isMuted ? '/unmute' : '/mute';
+    muteBtn.disabled = true;
+    fetch(endpoint, { method: 'POST' }).then(function(r) {
+      return r.json();
+    }).then(function(data) {
+      setMuteState(data.muted);
+    }).catch(function() {}).finally(function() {
+      muteBtn.disabled = false;
+    });
+  });
+
   // --- Skip ---
 
   var skipBtn = document.getElementById('skipBtn');
@@ -605,6 +672,7 @@ body::after {
       if (data.artist) parts.push(data.artist);
       if (data.album) parts.push(data.album);
       npMeta.textContent = parts.join(' \u2014 ');
+      if (typeof data.muted === 'boolean') setMuteState(data.muted);
     }).catch(function() {});
   }
 
@@ -732,6 +800,14 @@ body::after {
         if (data.artist) parts.push(data.artist);
         if (data.album) parts.push(data.album);
         npMeta.textContent = parts.join(' \u2014 ');
+        if (typeof data.muted === 'boolean') setMuteState(data.muted);
+      } catch(err) {}
+    });
+
+    es.addEventListener('mute', function(e) {
+      try {
+        var data = JSON.parse(e.data);
+        if (typeof data.muted === 'boolean') setMuteState(data.muted);
       } catch(err) {}
     });
 
