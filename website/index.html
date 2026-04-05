@@ -426,6 +426,17 @@ section {
   border-color: var(--amber);
 }
 
+button.cta-link {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, color 0.2s;
+}
+
+button.cta-link.copied {
+  color: #4ADE80;
+  border-color: #4ADE80;
+}
+
 /* --- Divider --- */
 .divider {
   width: 40px;
@@ -633,6 +644,7 @@ footer a:hover {
       <a href="https://github.com/nmelo/radioagent" class="cta-link primary">GitHub</a>
       <a href="https://github.com/nmelo/radioagent/blob/main/docs/release-plan.md" class="cta-link">Install Guide</a>
       <a href="https://github.com/nmelo/radioagent/blob/main/docs/dj-skill-spec.md" class="cta-link">DJ Skill</a>
+      <button class="cta-link" id="copySetupBtn" onclick="copySetup()">Copy Agent Setup</button>
     </div>
   </div>
 </section>
@@ -645,5 +657,26 @@ footer a:hover {
   </div>
 </footer>
 
+<script>
+function copySetup() {
+  var text = 'To set up Radio Agent for your coding agents, install these two skills:\n\n' +
+    '1. Setup skill (one-time connection config):\n' +
+    '   git clone https://github.com/nmelo/radioagent.git /tmp/radioagent-skills\n' +
+    '   cp -r /tmp/radioagent-skills/skills/setup ~/.claude/skills/radioagent-setup\n\n' +
+    '2. DJ skill (creative announcements):\n' +
+    '   cp -r /tmp/radioagent-skills/skills/dj ~/.claude/skills/dj\n\n' +
+    'Then tell your agent: run /radioagent-setup to connect to your Radio Agent instance.';
+  var btn = document.getElementById('copySetupBtn');
+  navigator.clipboard.writeText(text).then(function() {
+    var original = btn.textContent;
+    btn.textContent = 'Copied';
+    btn.classList.add('copied');
+    setTimeout(function() {
+      btn.textContent = original;
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+}
+</script>
 </body>
 </html>
