@@ -4,7 +4,8 @@ Inspired by [WRIT-FM](https://github.com/keltokhy/writ-fm), a 24/7 AI-powered in
 
 A LAN radio station that gives you ambient audio awareness of your AI coding agents. Music plays continuously. When agents finish tasks, hit errors, or need attention, a voice announces it over the stream. You hear what's happening from the kitchen, the couch, or wherever you are.
 
-https://github.com/user-attachments/assets/aaaf1e60-e656-4e6d-b111-58389394e210
+https://github.com/user-attachments/assets/5dd0feb8-326b-4537-976c-0bda534da10d
+
 
 ## How it works
 
