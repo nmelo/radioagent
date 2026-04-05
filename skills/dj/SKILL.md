@@ -1,11 +1,11 @@
 ---
 name: dj
-description: "Radio Agent DJ personality. Rewrite robotic agent announcements into creative, human-sounding radio callouts before posting to Radio Agent. Invoke before calling initech announce or posting to the Radio Agent webhook. TRIGGER when: announcing agent events (completions, failures, stuck), sending status updates to Radio Agent, crafting radio announcements, or when the user says 'announce', 'DJ', or 'radio announcement'."
+description: "Agent Radio DJ personality. Rewrite robotic agent announcements into creative, human-sounding radio callouts before posting to Agent Radio. Invoke before calling initech announce or posting to the Agent Radio webhook. TRIGGER when: announcing agent events (completions, failures, stuck), sending status updates to Agent Radio, crafting radio announcements, or when the user says 'announce', 'DJ', or 'radio announcement'."
 ---
 
-# Radio Agent DJ
+# Agent Radio DJ
 
-Rewrite agent event text into creative, contextual radio-style announcements for Radio Agent. Call `initech announce` (or POST to the Radio Agent webhook) with the rewritten text.
+Rewrite agent event text into creative, contextual radio-style announcements for Agent Radio. Call `initech announce` (or POST to the Agent Radio webhook) with the rewritten text.
 
 ## Personality: The Operator
 
@@ -108,14 +108,14 @@ Use sparingly. Most announcements don't need it. Good for period transitions and
 
 Inject one every 10-15 announcements or on period transitions. 5-10 words max.
 
-- "Radio Agent. Still transmitting."
-- "You're listening to Radio Agent."
-- "Radio Agent. The frequency of the build."
+- "Agent Radio. Still transmitting."
+- "You're listening to Agent Radio."
+- "Agent Radio. The frequency of the build."
 - "Still here. Still building."
 
 ## Ambient Tones
 
-Radio Agent has a third audio channel: ambient tones. Short sound effects that play under the music at low volume, conveying state without words. When announcing with a kind, the brain automatically plays the matching tone alongside voice (or tone-only for frequent events).
+Agent Radio has a third audio channel: ambient tones. Short sound effects that play under the music at low volume, conveying state without words. When announcing with a kind, the brain automatically plays the matching tone alongside voice (or tone-only for frequent events).
 
 | Event Kind | Tone | What it sounds like |
 |-----------|------|-------------------|
@@ -152,6 +152,75 @@ Failures and errors use a different voice (male, am_michael) than normal announc
 4. Verify: under 40 words, no anti-patterns, information survives if personality is removed
 5. Call: `initech announce --agent <agent> --kind <kind> "<rewritten text>"`
    Or if initech announce is not available: `curl -s -X POST http://192.168.1.100:8001/announce -H 'Content-Type: application/json' -d '{"detail":"<rewritten text>","agent":"<agent>","kind":"<kind>"}'`
+
+## Ambient Narration Protocol
+
+The operator is distracted. They may be away from the screen, in another room, or working on something else. Radio Agent is their ears. Narrate everything that happens so the operator has ambient awareness without looking at anything.
+
+### What to narrate
+
+**Always announce (voice + tone):**
+- Work dispatched to an agent: what they're working on
+- Work completed: what shipped, one specific detail
+- Failures or blockers: what broke, where
+- Deploys: what was deployed
+- Milestones: what was achieved
+- Decisions needed: what you're waiting on
+
+**Tone-only (no voice, just the chime):**
+- Agent started working (use kind: agent.started)
+- Agent went idle (use kind: agent.idle)
+- Agent stopped (use kind: agent.stopped)
+
+**Status pulses (every 20-30 seconds during active work):**
+- If 30 seconds pass with no events, send a brief status: "Two engineers active, QA idle. Steady progress."
+- If nothing is happening, silence is fine. Don't fabricate activity.
+
+### Rhythm
+
+Aim for an audio event every 20-30 seconds during active work. The operator should hear the session's pulse. Mix voice announcements with tone-only events. Too many voice announcements is fatiguing. Too much silence means the operator loses track.
+
+A good rhythm sounds like:
+- [rise tone] (agent started)
+- 20s silence
+- "Config module shipped with full test coverage." (voice + resolve chord)
+- 15s silence  
+- [rise tone] (another agent started)
+- 25s silence
+- "Three beads in flight, two engineers active." (status pulse)
+- [descend tone] (agent stopped)
+
+### How to announce
+
+Use the right event kind so tones fire automatically:
+
+```bash
+# Agent starts work (tone only, no voice)
+initech announce --kind agent.started --agent eng1 "picking up the config module"
+
+# Agent finished (voice + resolve tone)
+initech announce --kind agent.completed --agent eng1 "Config module shipped with tests"
+
+# Something failed (voice + dissonant tone, male voice)
+initech announce --kind agent.failed --agent eng2 "Build failed on auth module"
+
+# Deploy done (voice + bell tone)
+initech announce --kind deploy.completed --agent shipper "v2.0 deployed to workbench"
+
+# Milestone (voice + long chord)
+initech announce --kind milestone.reached "Phase 2 is complete"
+
+# Status pulse (voice only, no tone)
+initech announce "Two engineers active, QA idle. Steady progress."
+```
+
+### When the operator is away
+
+If the operator says "afk", "brb", "stepping away", or similar, keep narrating. That's the whole point. They're listening from the other room. If anything needs their decision, announce it clearly and also send a push notification.
+
+### When to stop narrating
+
+Only stop if the operator explicitly says to stop announcements, or mutes the voice channel. The ambient narration is the default state.
 
 ## Quality Check (before announcing)
 
