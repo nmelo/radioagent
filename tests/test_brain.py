@@ -18,7 +18,9 @@ from brain import (
     process_announcement,
     create_app,
     get_now_playing_from_icecast,
+    get_next_track,
     query_liquidsoap,
+    _parse_liquidsoap_metadata,
 )
 
 
@@ -437,10 +439,29 @@ class TestApp:
         """GET /now-playing includes muted field, default false."""
         with patch("brain.get_now_playing_from_icecast", return_value={
             "title": "Test", "artist": "", "album": "", "source_type": "music",
-        }):
+        }), patch("brain.get_next_track", return_value=None):
             resp = client.get("/now-playing")
         data = resp.json()
         assert data["muted"] is False
+
+    def test_now_playing_includes_next_track(self, client):
+        """GET /now-playing includes next field from Liquidsoap."""
+        next_track = {"title": "Up Next", "artist": "Someone", "album": ""}
+        with patch("brain.get_now_playing_from_icecast", return_value={
+            "title": "Current", "artist": "", "album": "", "source_type": "music",
+        }), patch("brain.get_next_track", return_value=next_track):
+            resp = client.get("/now-playing")
+        data = resp.json()
+        assert data["next"] == next_track
+
+    def test_now_playing_next_null_when_unavailable(self, client):
+        """GET /now-playing returns next=null when no prefetched track."""
+        with patch("brain.get_now_playing_from_icecast", return_value={
+            "title": "Current", "artist": "", "album": "", "source_type": "music",
+        }), patch("brain.get_next_track", return_value=None):
+            resp = client.get("/now-playing")
+        data = resp.json()
+        assert data["next"] is None
 
     def test_mute_toggle_reflected_in_now_playing(self, client):
         """After POST /mute, GET /now-playing shows muted=true."""
@@ -521,3 +542,89 @@ class TestNowPlayingFromIcecast:
             result = get_now_playing_from_icecast("localhost", 8000, "/stream")
         assert result["title"] == "Music For Airports"
         assert result["artist"] == "Brian Eno"
+
+
+# --- Next track ---
+
+
+class TestNextTrack:
+    def test_returns_next_track_metadata(self, tmp_path):
+        """When Liquidsoap has a prefetched track, return its metadata."""
+        sock = tmp_path / "test.sock"
+        responses = {
+            "request.on_air": "1",
+            "request.alive": "1 2",
+            'request.metadata 2': 'title="Ambient"\nartist="Eno"\nalbum="Thursday"\n',
+        }
+        with patch("brain.query_liquidsoap", side_effect=lambda s, cmd: responses.get(cmd)):
+            result = get_next_track(sock)
+        assert result == {"title": "Ambient", "artist": "Eno", "album": "Thursday"}
+
+    def test_no_next_track(self, tmp_path):
+        """When only the current track is alive, return None."""
+        sock = tmp_path / "test.sock"
+        responses = {
+            "request.on_air": "1",
+            "request.alive": "1",
+        }
+        with patch("brain.query_liquidsoap", side_effect=lambda s, cmd: responses.get(cmd)):
+            result = get_next_track(sock)
+        assert result is None
+
+    def test_socket_unavailable(self, tmp_path):
+        """When Liquidsoap socket is down, return None."""
+        sock = tmp_path / "test.sock"
+        with patch("brain.query_liquidsoap", return_value=None):
+            result = get_next_track(sock)
+        assert result is None
+
+    def test_fallback_to_filename(self, tmp_path):
+        """When title tag is missing, fall back to filename stem."""
+        sock = tmp_path / "test.sock"
+        responses = {
+            "request.on_air": "3",
+            "request.alive": "3 7",
+            'request.metadata 7': 'filename="/home/music/Brian_Eno-Ambient_1.flac"\nartist=""\n',
+        }
+        with patch("brain.query_liquidsoap", side_effect=lambda s, cmd: responses.get(cmd)):
+            result = get_next_track(sock)
+        assert result["title"] == "Brian Eno Ambient 1"
+
+    def test_multiple_prefetched_picks_first(self, tmp_path):
+        """When multiple tracks are prefetched, return the first non-on_air one."""
+        sock = tmp_path / "test.sock"
+        responses = {
+            "request.on_air": "1",
+            "request.alive": "1 5 9",
+            'request.metadata 5': 'title="Next Song"\nartist="Artist"\nalbum=""\n',
+        }
+        with patch("brain.query_liquidsoap", side_effect=lambda s, cmd: responses.get(cmd)):
+            result = get_next_track(sock)
+        assert result["title"] == "Next Song"
+
+    def test_metadata_parse_empty(self, tmp_path):
+        """When metadata response is empty/unparseable, return None."""
+        sock = tmp_path / "test.sock"
+        responses = {
+            "request.on_air": "1",
+            "request.alive": "1 2",
+            'request.metadata 2': '',
+        }
+        with patch("brain.query_liquidsoap", side_effect=lambda s, cmd: responses.get(cmd)):
+            result = get_next_track(sock)
+        assert result is None
+
+
+class TestParseMetadata:
+    def test_parses_standard_metadata(self):
+        raw = 'title="Hello World"\nartist="Test"\nalbum="Demo"\n'
+        meta = _parse_liquidsoap_metadata(raw)
+        assert meta == {"title": "Hello World", "artist": "Test", "album": "Demo"}
+
+    def test_empty_string(self):
+        assert _parse_liquidsoap_metadata("") == {}
+
+    def test_ignores_malformed_lines(self):
+        raw = 'title="Good"\nnot a valid line\nartist="Also Good"\n'
+        meta = _parse_liquidsoap_metadata(raw)
+        assert meta == {"title": "Good", "artist": "Also Good"}

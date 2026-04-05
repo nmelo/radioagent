@@ -215,6 +215,53 @@ def query_liquidsoap(socket_path: Path, command: str) -> str | None:
         return None
 
 
+def _parse_liquidsoap_metadata(raw: str) -> dict[str, str]:
+    """Parse Liquidsoap metadata response into a dict."""
+    meta = {}
+    for line in raw.splitlines():
+        m = _METADATA_RE.match(line.strip())
+        if m:
+            meta[m.group(1)] = m.group(2)
+    return meta
+
+
+def get_next_track(socket_path: Path) -> dict | None:
+    """Query Liquidsoap for the next prefetched track's metadata."""
+    on_air = query_liquidsoap(socket_path, "request.on_air")
+    if not on_air:
+        return None
+
+    alive = query_liquidsoap(socket_path, "request.alive")
+    if not alive:
+        return None
+
+    on_air_rids = set(on_air.strip().split())
+    alive_rids = alive.strip().split()
+    next_rids = [rid for rid in alive_rids if rid not in on_air_rids]
+    if not next_rids:
+        return None
+
+    raw = query_liquidsoap(socket_path, f"request.metadata {next_rids[0]}")
+    if not raw:
+        return None
+
+    meta = _parse_liquidsoap_metadata(raw)
+    title = meta.get("title", "")
+    artist = meta.get("artist", "")
+    album = meta.get("album", "")
+
+    # Fallback to filename if no title tag
+    if not title:
+        filename = meta.get("filename", "")
+        if filename:
+            title = Path(filename).stem.replace("_", " ").replace("-", " ")
+
+    if not title:
+        return None
+
+    return {"title": title, "artist": artist, "album": album}
+
+
 def get_now_playing_from_icecast(host: str, port: int, mount: str) -> dict:
     """Query Icecast status JSON for the track metadata listeners actually hear.
 
@@ -376,6 +423,7 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
     def now_playing():
         data = get_now_playing_from_icecast(config.icecast_host, config.icecast_port, config.icecast_mount)
         data["muted"] = music_muted
+        data["next"] = get_next_track(config.liquidsoap_socket)
         return data
 
     @app.get("/recent-announcements")
