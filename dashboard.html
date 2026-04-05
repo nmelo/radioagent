@@ -453,7 +453,7 @@ body::after {
   animation: spin 0.5s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.channel-toggle svg { width: 14px; height: 14px; flex-shrink: 0; }
+.channel-toggle svg { width: 14px; height: 14px; flex-shrink: 0; overflow: visible; }
 
 .channel-toggle.active {
   border-color: var(--amber);
@@ -957,7 +957,7 @@ body::after {
         musicToggle.classList.remove('loading');
         updateUI();
         musicToggle.disabled = false;
-      }, 3000);
+      }, 5000);
     }).catch(function() {
       musicToggle.classList.remove('loading');
       updateUI();
