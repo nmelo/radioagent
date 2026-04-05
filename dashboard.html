@@ -941,7 +941,7 @@ body::after {
         connectBtn.disabled = false;
         syncServerState();
         updateUI();
-      }, 5000);
+      }, 3000);
     }).catch(function() {
       connectBtn.classList.remove('loading');
       // Safe: only static SVG constant, no user content
@@ -970,7 +970,7 @@ body::after {
       disconnectBtn.disabled = false;
       disconnectBtn.textContent = 'DISCONNECT';
       updateUI();
-    }, 5000);
+    }, 3000);
   }
 
   function toggleMusic() {
