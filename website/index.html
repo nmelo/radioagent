@@ -58,21 +58,7 @@ body::before {
   background-size: 256px 256px;
 }
 
-/* --- Scan lines (hero only) --- */
-.hero::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 2;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent 0px,
-    transparent 2px,
-    rgba(0, 0, 0, 0.12) 2px,
-    rgba(0, 0, 0, 0.12) 3px
-  );
-}
+/* Scan lines removed: noise texture on body provides atmosphere */
 
 /* --- Layout --- */
 .wrap {
@@ -161,58 +147,10 @@ section {
 
 /* --- Hero --- */
 .hero {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
   position: relative;
   padding: 80px 24px 60px;
-}
-
-.hero-neon {
-  font-family: 'Tilt Neon', sans-serif;
-  font-size: clamp(3rem, 10vw, 6rem);
-  color: #FF3B3B;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  display: inline-block;
-  padding: 12px 32px;
-  border: 2px solid #FF3B3B;
-  border-radius: 16px;
-  text-shadow:
-    0 0 2px #FF3B3B,
-    0 0 7px rgba(239, 68, 68, 0.8),
-    0 0 15px rgba(220, 38, 38, 0.5),
-    0 0 30px rgba(185, 28, 28, 0.25),
-    0 0 50px rgba(153, 27, 27, 0.15);
-  box-shadow:
-    0 0 2px #FF3B3B,
-    0 0 7px rgba(239, 68, 68, 0.5),
-    0 0 15px rgba(220, 38, 38, 0.2),
-    inset 0 0 7px rgba(239, 68, 68, 0.1);
-  position: relative;
-  z-index: 3;
-  animation: neon-on 1.5s ease-out;
-}
-
-@keyframes neon-on {
-  0% { opacity: 0; text-shadow: none; box-shadow: none; transform: translateY(8px); }
-  40% { opacity: 0.6; }
-  100% { opacity: 1; transform: translateY(0); }
-}
-
-.hero-tagline {
-  font-family: var(--font-sans);
-  font-style: italic;
-  font-size: clamp(1rem, 2.5vw, 1.25rem);
-  color: var(--text-dim);
-  max-width: 520px;
-  margin-top: 20px;
-  position: relative;
-  z-index: 3;
-  animation: fade-up 1.5s ease-out 0.3s both;
+  max-width: 800px;
+  margin: 0 auto;
 }
 
 @keyframes fade-up {
@@ -220,11 +158,41 @@ section {
   100% { opacity: 1; transform: translateY(0); }
 }
 
-.hero-cta {
-  margin-top: 40px;
+.hero-headline {
+  font-family: var(--font-sans);
+  font-size: clamp(2.2rem, 6vw, 3.2rem);
+  font-weight: 700;
+  color: var(--text-bright);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  max-width: 520px;
   position: relative;
   z-index: 3;
-  animation: fade-up 1.5s ease-out 0.6s both;
+  animation: fade-up 1s ease-out;
+}
+
+.hero-headline em {
+  font-style: normal;
+  color: var(--amber);
+}
+
+.hero-sub {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  line-height: 1.7;
+  max-width: 480px;
+  margin-top: 20px;
+  position: relative;
+  z-index: 3;
+  animation: fade-up 1s ease-out 0.15s both;
+}
+
+.hero-cta {
+  margin-top: 28px;
+  position: relative;
+  z-index: 3;
+  animation: fade-up 1s ease-out 0.3s both;
 }
 
 .hero-cta code {
@@ -244,12 +212,10 @@ section {
 }
 
 .hero-screenshot {
-  margin-top: 60px;
+  margin-top: 48px;
   position: relative;
   z-index: 3;
-  max-width: 680px;
-  width: 100%;
-  animation: fade-up 1.5s ease-out 0.9s both;
+  animation: fade-up 1s ease-out 0.45s both;
 }
 
 .hero-screenshot img {
@@ -259,6 +225,15 @@ section {
   box-shadow:
     0 0 30px rgba(232, 163, 23, 0.08),
     0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+/* --- CTA headline --- */
+.cta-headline {
+  font-family: var(--font-sans);
+  font-size: clamp(1.8rem, 5vw, 2.4rem);
+  font-weight: 700;
+  color: var(--text-bright);
+  letter-spacing: -0.01em;
 }
 
 /* --- Section headers --- */
@@ -548,7 +523,7 @@ footer a:hover {
   .channels { grid-template-columns: 1fr; }
   .features { grid-template-columns: 1fr; gap: 28px; }
   .stack-list { grid-template-columns: 1fr; }
-  .hero { padding: 60px 24px 40px; }
+  .hero { padding: 48px 24px 32px; }
   .channel { padding: 20px; }
   .nav-links a span { display: none; }
   .nav-links { gap: 16px; }
@@ -571,13 +546,13 @@ footer a:hover {
 
 <!-- ====== HERO ====== -->
 <section class="hero">
-  <h1 class="hero-neon">Radio Agent</h1>
-  <p class="hero-tagline">A radio station for your AI coding session. Ambient music, voice announcements, peripheral awareness. Hear your build. Don't watch it.</p>
+  <h1 class="hero-headline">Hear your build.<br><em>Don't watch it.</em></h1>
+  <p class="hero-sub">A radio station for AI coding sessions. Ambient music plays continuously. When your agents finish work, hit failures, or pick up new tasks, a voice announces it over the stream. Peripheral awareness without a screen.</p>
   <div class="hero-cta">
     <code>docker compose up</code>
   </div>
   <div class="hero-screenshot">
-    <img src="assets/dashboard.png" alt="Agent Radio dashboard showing now playing, wire feed with typing animation, and player controls on a dark broadcast-tower interface" loading="lazy">
+    <img src="assets/dashboard.png" alt="Radio Agent dashboard showing now playing, wire feed with typing animation, and player controls" loading="lazy">
   </div>
 </section>
 
@@ -725,7 +700,7 @@ footer a:hover {
 <!-- ====== CTA ====== -->
 <section class="cta-section">
   <div class="wrap">
-    <h2 class="hero-neon" style="font-size: clamp(2rem, 6vw, 3.5rem); padding: 10px 24px; border-radius: 12px;">Start listening</h2>
+    <h2 class="cta-headline">Start listening</h2>
     <div class="cta-links">
       <a href="https://github.com/nmelo/radioagent" class="cta-link primary">GitHub</a>
       <a href="https://github.com/nmelo/radioagent/blob/main/docs/release-plan.md" class="cta-link">Install Guide</a>
