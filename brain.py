@@ -498,6 +498,20 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
             return FileResponse(html_path, media_type="text/html")
         return JSONResponse(status_code=404, content={"error": "dashboard.html not found"})
 
+    @app.get("/favicon.ico")
+    def favicon():
+        ico_path = Path(__file__).parent / "website" / "favicon.ico"
+        if ico_path.exists():
+            return FileResponse(ico_path, media_type="image/x-icon")
+        return JSONResponse(status_code=404, content={"error": "favicon.ico not found"})
+
+    @app.get("/assets/apple-touch-icon.png")
+    def apple_touch_icon():
+        icon_path = Path(__file__).parent / "website" / "assets" / "apple-touch-icon.png"
+        if icon_path.exists():
+            return FileResponse(icon_path, media_type="image/png")
+        return JSONResponse(status_code=404, content={"error": "apple-touch-icon.png not found"})
+
     @app.get("/skill/dj.skill")
     def download_dj_skill():
         skill_path = Path(__file__).parent / "skills" / "dj.skill"
