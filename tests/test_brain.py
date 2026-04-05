@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import wave
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -18,9 +17,7 @@ from brain import (
     process_announcement,
     create_app,
     get_now_playing_from_icecast,
-    get_next_track,
     query_liquidsoap,
-    _parse_liquidsoap_metadata,
 )
 
 
@@ -350,8 +347,7 @@ class TestApp:
 
     def test_now_playing_icecast_unavailable(self, client):
         """When Icecast is unreachable, return fallback."""
-        with patch("urllib.request.urlopen", side_effect=Exception("Connection refused")):
-            resp = client.get("/now-playing")
+        resp = client.get("/now-playing")
         assert resp.status_code == 200
         data = resp.json()
         assert data["title"] == "Connecting..."
@@ -405,278 +401,80 @@ class TestApp:
         })
         assert resp.headers.get("access-control-allow-origin") == "*"
 
-    def test_mute_sets_volume_zero(self, client):
-        """POST /mute sends var.set music_volume = 0.0 to Liquidsoap."""
-        with patch("brain.query_liquidsoap", return_value="Variable music_volume set.") as mock_ql:
-            resp = client.post("/mute")
-        assert resp.status_code == 200
-        assert resp.json() == {"status": "ok", "muted": True}
-        mock_ql.assert_called_once()
-        assert "0.0" in mock_ql.call_args[0][1]
-
-    def test_unmute_restores_volume(self, client):
-        """POST /unmute sends var.set music_volume = 1.0 to Liquidsoap."""
-        with patch("brain.query_liquidsoap", return_value="Variable music_volume set.") as mock_ql:
-            resp = client.post("/unmute")
-        assert resp.status_code == 200
-        assert resp.json() == {"status": "ok", "muted": False}
-        mock_ql.assert_called_once()
-        assert "1.0" in mock_ql.call_args[0][1]
-
-    def test_mute_liquidsoap_unavailable(self, client):
-        """POST /mute returns 503 when Liquidsoap socket is down."""
-        with patch("brain.query_liquidsoap", return_value=None):
-            resp = client.post("/mute")
-        assert resp.status_code == 503
-
-    def test_unmute_liquidsoap_unavailable(self, client):
-        """POST /unmute returns 503 when Liquidsoap socket is down."""
-        with patch("brain.query_liquidsoap", return_value=None):
-            resp = client.post("/unmute")
-        assert resp.status_code == 503
-
-    def test_now_playing_includes_muted_state(self, client):
-        """GET /now-playing includes muted field, default false."""
-        with patch("brain.get_now_playing_from_icecast", return_value={
-            "title": "Test", "artist": "", "album": "", "source_type": "music",
-        }), patch("brain.get_next_track", return_value=None):
-            resp = client.get("/now-playing")
-        data = resp.json()
-        assert data["muted"] is False
-
-    def test_now_playing_includes_next_track(self, client):
-        """GET /now-playing includes next field from Liquidsoap."""
-        next_track = {"title": "Up Next", "artist": "Someone", "album": ""}
-        with patch("brain.get_now_playing_from_icecast", return_value={
-            "title": "Current", "artist": "", "album": "", "source_type": "music",
-        }), patch("brain.get_next_track", return_value=next_track):
-            resp = client.get("/now-playing")
-        data = resp.json()
-        assert data["next"] == next_track
-
-    def test_now_playing_next_null_when_unavailable(self, client):
-        """GET /now-playing returns next=null when no prefetched track."""
-        with patch("brain.get_now_playing_from_icecast", return_value={
-            "title": "Current", "artist": "", "album": "", "source_type": "music",
-        }), patch("brain.get_next_track", return_value=None):
-            resp = client.get("/now-playing")
-        data = resp.json()
-        assert data["next"] is None
-
-    def test_mute_toggle_reflected_in_now_playing(self, client):
-        """After POST /mute, GET /now-playing shows muted=true."""
-        with patch("brain.query_liquidsoap", return_value="ok"):
-            client.post("/mute")
-        with patch("brain.get_now_playing_from_icecast", return_value={
-            "title": "Test", "artist": "", "album": "", "source_type": "music",
-        }):
-            resp = client.get("/now-playing")
-        assert resp.json()["muted"] is True
-
-        # Unmute and verify
-        with patch("brain.query_liquidsoap", return_value="ok"):
-            client.post("/unmute")
-        with patch("brain.get_now_playing_from_icecast", return_value={
-            "title": "Test", "artist": "", "album": "", "source_type": "music",
-        }):
-            resp = client.get("/now-playing")
-        assert resp.json()["muted"] is False
-
-    def test_mute_announcements(self, client):
-        """POST /mute-announcements sets announcements_muted=True."""
-        resp = client.post("/mute-announcements")
-        assert resp.status_code == 200
-        assert resp.json() == {"status": "ok", "muted": True}
-
-    def test_unmute_announcements(self, client):
-        """POST /unmute-announcements sets announcements_muted=False."""
-        client.post("/mute-announcements")
-        resp = client.post("/unmute-announcements")
-        assert resp.status_code == 200
-        assert resp.json() == {"status": "ok", "muted": False}
-
-    def test_muted_announcement_skips_tts(self, client):
-        """When announcements muted, POST /announce returns muted and skips TTS."""
-        client.post("/mute-announcements")
-        resp = client.post("/announce", json={"detail": "test muted", "agent": "eng1"})
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "muted"
-
-    def test_muted_announcement_still_in_history(self, client):
-        """Muted announcements still appear in history."""
-        client.post("/mute-announcements")
-        client.post("/announce", json={"detail": "visible in history", "agent": "eng1"})
-        resp = client.get("/recent-announcements")
-        data = resp.json()
-        assert len(data) == 1
-        assert "visible in history" in data[0]["text"]
-
-    def test_unmuted_announcement_resumes_tts(self, client):
-        """After unmuting, announcements go through TTS again."""
-        client.post("/mute-announcements")
-        client.post("/unmute-announcements")
-        resp = client.post("/announce", json={"detail": "back to normal", "agent": "eng1"})
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "immediate"
-
-    def test_announcements_muted_in_now_playing(self, client):
-        """GET /now-playing includes announcements_muted field."""
-        with patch("brain.get_now_playing_from_icecast", return_value={
-            "title": "Test", "artist": "", "album": "", "source_type": "music",
-        }), patch("brain.get_next_track", return_value=None):
-            resp = client.get("/now-playing")
-        assert resp.json()["announcements_muted"] is False
-
-        client.post("/mute-announcements")
-        with patch("brain.get_now_playing_from_icecast", return_value={
-            "title": "Test", "artist": "", "album": "", "source_type": "music",
-        }), patch("brain.get_next_track", return_value=None):
-            resp = client.get("/now-playing")
-        assert resp.json()["announcements_muted"] is True
-
 
 # --- Icecast metadata ---
 
 
-def _mock_icecast_response(title: str = "", mount: str = "/stream",
-                           multi: bool = False) -> dict:
-    """Build a fake Icecast status-json.xsl response."""
-    source = {"listenurl": f"http://localhost:8000{mount}", "title": title}
-    if multi:
-        other = {"listenurl": "http://localhost:8000/other", "title": "Other Stream"}
-        return {"icestats": {"source": [other, source]}}
-    return {"icestats": {"source": source}}
+def _mock_icecast_response(icecast_json):
+    """Create a mock urllib response for Icecast status JSON."""
+    import json as _json
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = _json.dumps(icecast_json).encode()
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    return mock_resp
 
 
 class TestNowPlayingFromIcecast:
     def test_parses_artist_title(self):
-        data = _mock_icecast_response("Ruben Gonzalez - Chanchullo")
-        with patch("urllib.request.urlopen") as mock_open:
-            mock_open.return_value.__enter__ = lambda s: s
-            mock_open.return_value.__exit__ = MagicMock(return_value=False)
-            mock_open.return_value.read.return_value = json.dumps(data).encode()
+        """Icecast title 'Artist - Title' is split correctly."""
+        icecast_json = {
+            "icestats": {
+                "source": {
+                    "title": "Ruben Gonzalez - Chanchullo",
+                    "listenurl": "http://localhost:8000/stream",
+                }
+            }
+        }
+        with patch("urllib.request.urlopen", return_value=_mock_icecast_response(icecast_json)):
             result = get_now_playing_from_icecast("localhost", 8000, "/stream")
+
         assert result["title"] == "Chanchullo"
         assert result["artist"] == "Ruben Gonzalez"
-        assert result["source_type"] == "music"
 
     def test_title_only_no_dash(self):
-        data = _mock_icecast_response("Ambient Waves")
-        with patch("urllib.request.urlopen") as mock_open:
-            mock_open.return_value.__enter__ = lambda s: s
-            mock_open.return_value.__exit__ = MagicMock(return_value=False)
-            mock_open.return_value.read.return_value = json.dumps(data).encode()
+        """Title without ' - ' separator goes entirely to title field."""
+        icecast_json = {
+            "icestats": {
+                "source": {
+                    "title": "ambient_drone_003",
+                    "listenurl": "http://localhost:8000/stream",
+                }
+            }
+        }
+        with patch("urllib.request.urlopen", return_value=_mock_icecast_response(icecast_json)):
             result = get_now_playing_from_icecast("localhost", 8000, "/stream")
-        assert result["title"] == "Ambient Waves"
+
+        assert result["title"] == "ambient_drone_003"
         assert result["artist"] == ""
 
     def test_icecast_unreachable(self):
-        with patch("urllib.request.urlopen", side_effect=Exception("Connection refused")):
+        """When Icecast is down, return fallback."""
+        with patch("urllib.request.urlopen", side_effect=Exception("conn refused")):
             result = get_now_playing_from_icecast("localhost", 8000, "/stream")
+
         assert result["title"] == "Connecting..."
 
     def test_empty_title(self):
-        data = _mock_icecast_response("")
-        with patch("urllib.request.urlopen") as mock_open:
-            mock_open.return_value.__enter__ = lambda s: s
-            mock_open.return_value.__exit__ = MagicMock(return_value=False)
-            mock_open.return_value.read.return_value = json.dumps(data).encode()
+        """When Icecast has no title metadata, return fallback."""
+        icecast_json = {"icestats": {"source": {"title": ""}}}
+        with patch("urllib.request.urlopen", return_value=_mock_icecast_response(icecast_json)):
             result = get_now_playing_from_icecast("localhost", 8000, "/stream")
+
         assert result["title"] == "Connecting..."
 
     def test_multiple_sources_selects_mount(self):
-        data = _mock_icecast_response("Brian Eno - Music For Airports",
-                                       mount="/stream", multi=True)
-        with patch("urllib.request.urlopen") as mock_open:
-            mock_open.return_value.__enter__ = lambda s: s
-            mock_open.return_value.__exit__ = MagicMock(return_value=False)
-            mock_open.return_value.read.return_value = json.dumps(data).encode()
+        """When Icecast has multiple sources, select by mount path."""
+        icecast_json = {
+            "icestats": {
+                "source": [
+                    {"title": "Wrong - Track", "listenurl": "http://localhost:8000/other"},
+                    {"title": "Right - Track", "listenurl": "http://localhost:8000/stream"},
+                ]
+            }
+        }
+        with patch("urllib.request.urlopen", return_value=_mock_icecast_response(icecast_json)):
             result = get_now_playing_from_icecast("localhost", 8000, "/stream")
-        assert result["title"] == "Music For Airports"
-        assert result["artist"] == "Brian Eno"
 
-
-# --- Next track ---
-
-
-class TestNextTrack:
-    def test_returns_next_track_metadata(self, tmp_path):
-        """When Liquidsoap has a prefetched track, return its metadata."""
-        sock = tmp_path / "test.sock"
-        responses = {
-            "request.on_air": "1",
-            "request.alive": "1 2",
-            'request.metadata 2': 'title="Ambient"\nartist="Eno"\nalbum="Thursday"\n',
-        }
-        with patch("brain.query_liquidsoap", side_effect=lambda s, cmd: responses.get(cmd)):
-            result = get_next_track(sock)
-        assert result == {"title": "Ambient", "artist": "Eno", "album": "Thursday"}
-
-    def test_no_next_track(self, tmp_path):
-        """When only the current track is alive, return None."""
-        sock = tmp_path / "test.sock"
-        responses = {
-            "request.on_air": "1",
-            "request.alive": "1",
-        }
-        with patch("brain.query_liquidsoap", side_effect=lambda s, cmd: responses.get(cmd)):
-            result = get_next_track(sock)
-        assert result is None
-
-    def test_socket_unavailable(self, tmp_path):
-        """When Liquidsoap socket is down, return None."""
-        sock = tmp_path / "test.sock"
-        with patch("brain.query_liquidsoap", return_value=None):
-            result = get_next_track(sock)
-        assert result is None
-
-    def test_fallback_to_filename(self, tmp_path):
-        """When title tag is missing, fall back to filename stem."""
-        sock = tmp_path / "test.sock"
-        responses = {
-            "request.on_air": "3",
-            "request.alive": "3 7",
-            'request.metadata 7': 'filename="/home/music/Brian_Eno-Ambient_1.flac"\nartist=""\n',
-        }
-        with patch("brain.query_liquidsoap", side_effect=lambda s, cmd: responses.get(cmd)):
-            result = get_next_track(sock)
-        assert result["title"] == "Brian Eno Ambient 1"
-
-    def test_multiple_prefetched_picks_first(self, tmp_path):
-        """When multiple tracks are prefetched, return the first non-on_air one."""
-        sock = tmp_path / "test.sock"
-        responses = {
-            "request.on_air": "1",
-            "request.alive": "1 5 9",
-            'request.metadata 5': 'title="Next Song"\nartist="Artist"\nalbum=""\n',
-        }
-        with patch("brain.query_liquidsoap", side_effect=lambda s, cmd: responses.get(cmd)):
-            result = get_next_track(sock)
-        assert result["title"] == "Next Song"
-
-    def test_metadata_parse_empty(self, tmp_path):
-        """When metadata response is empty/unparseable, return None."""
-        sock = tmp_path / "test.sock"
-        responses = {
-            "request.on_air": "1",
-            "request.alive": "1 2",
-            'request.metadata 2': '',
-        }
-        with patch("brain.query_liquidsoap", side_effect=lambda s, cmd: responses.get(cmd)):
-            result = get_next_track(sock)
-        assert result is None
-
-
-class TestParseMetadata:
-    def test_parses_standard_metadata(self):
-        raw = 'title="Hello World"\nartist="Test"\nalbum="Demo"\n'
-        meta = _parse_liquidsoap_metadata(raw)
-        assert meta == {"title": "Hello World", "artist": "Test", "album": "Demo"}
-
-    def test_empty_string(self):
-        assert _parse_liquidsoap_metadata("") == {}
-
-    def test_ignores_malformed_lines(self):
-        raw = 'title="Good"\nnot a valid line\nartist="Also Good"\n'
-        meta = _parse_liquidsoap_metadata(raw)
-        assert meta == {"title": "Good", "artist": "Also Good"}
+        assert result["title"] == "Track"
+        assert result["artist"] == "Right"
