@@ -68,6 +68,18 @@ def is_tone_only(kind: str) -> bool:
     return any(fnmatch(kind, p) for p in _TONE_ONLY_KINDS)
 
 
+# Event kinds that use the failure voice (am_michael) instead of default
+_FAILURE_VOICE_KINDS = {"*.failed", "*.stuck"}
+FAILURE_VOICE = "am_michael"
+
+
+def get_voice_for_kind(kind: str, default_voice: str) -> str:
+    """Return the TTS voice to use for an event kind."""
+    if any(fnmatch(kind, p) for p in _FAILURE_VOICE_KINDS):
+        return FAILURE_VOICE
+    return default_voice
+
+
 # --- Data models ---
 
 
@@ -92,6 +104,7 @@ class QueuedAnnouncement:
     text: str
     kind: str
     agent: str
+    voice: str | None = None
     received_at: datetime = field(default_factory=datetime.now)
 
 
@@ -392,14 +405,14 @@ def _schedule_wav_cleanup(path: Path) -> None:
 
 
 def process_announcement(announcement: QueuedAnnouncement, tts: TTSEngine,
-                         config: RadioConfig) -> bool:
+                         config: RadioConfig, voice: str | None = None) -> bool:
     """Full announcement pipeline: TTS -> validate -> push."""
     text = announcement.text
     wav_path = WAV_DIR / f"announce_{uuid.uuid4().hex[:12]}.wav"
 
     # Render TTS
     t0 = time.time()
-    if not tts.render(text, wav_path):
+    if not tts.render(text, wav_path, voice=voice):
         logger.warning("TTS render failed for: %s", text[:80])
         return False
     elapsed = time.time() - t0
@@ -432,7 +445,7 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         config.webhook_rate_limit, max_queue=10
     )
     rate_limiter.set_processor(
-        lambda a: process_announcement(a, tts, config)
+        lambda a: process_announcement(a, tts, config, voice=a.voice)
     )
     drain_task = None
     announcement_history: deque[dict] = deque(maxlen=20)
@@ -473,6 +486,13 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         if html_path.exists():
             return FileResponse(html_path, media_type="text/html")
         return JSONResponse(status_code=404, content={"error": "dashboard.html not found"})
+
+    @app.get("/skill/dj.skill")
+    def download_dj_skill():
+        skill_path = Path(__file__).parent / "skills" / "dj.skill"
+        if skill_path.exists():
+            return FileResponse(skill_path, filename="dj.skill", media_type="application/octet-stream")
+        return JSONResponse(status_code=404, content={"error": "dj.skill not found"})
 
     @app.get("/now-playing")
     def now_playing():
@@ -627,10 +647,12 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
             return {"status": "muted"}
 
         # Voice pipeline: TTS -> validate -> push
+        voice = get_voice_for_kind(req.kind, config.tts_voice)
         entry = QueuedAnnouncement(
             text=script,
             kind=req.kind,
             agent=req.agent,
+            voice=voice,
         )
         result = rate_limiter.submit(entry)
 
@@ -656,7 +678,8 @@ def main():
     )
 
     config = load_config(Path(__file__).parent / "config.yaml")
-    tts = KokoroEngine(voice=config.tts_voice, speed=config.tts_speed)
+    tts = KokoroEngine(voice=config.tts_voice, speed=config.tts_speed,
+                       extra_voices=[FAILURE_VOICE])
     app = create_app(config, tts)
 
     uv_config = uvicorn.Config(
