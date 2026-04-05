@@ -65,10 +65,10 @@ voice = amplify(3.5, voice)
 
 # --- Ambient tones queue ---
 tones = request.queue(id="tones")
-tones = amplify(0.25, tones)
+tones = amplify(2.0, tones)
 
-# --- Mix: layer tones on music, duck combined under voice ---
-music_with_tones = add([music, tones])
+# --- Mix: duck music under tones, then duck combined under voice ---
+music_with_tones = smooth_add(normal=music, special=tones)
 radio = smooth_add(normal=music_with_tones, special=voice)
 
 # --- Output to Icecast ---
