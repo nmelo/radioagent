@@ -546,16 +546,19 @@ body::after {
       backoffMs = BACKOFF_INITIAL;
       setPlayerStatus('connected');
       setPlayIcon(false);
+      onAirBadge.classList.add('active');
     });
 
     audio.addEventListener('pause', function() {
       isPlaying = false;
       setPlayIcon(true);
+      onAirBadge.classList.remove('active');
     });
 
     audio.addEventListener('error', function() {
       isPlaying = false;
       setPlayIcon(true);
+      onAirBadge.classList.remove('active');
       if (!userPaused) startReconnect();
     });
 
@@ -739,8 +742,6 @@ body::after {
     var text = job.text;
     var charIndex = 0;
 
-    onAirBadge.classList.add('active');
-
     // Build the typing DOM structure
     el.textContent = '';
     var prefix = document.createElement('span');
@@ -762,7 +763,6 @@ body::after {
         setTimeout(typeNext, TYPING_SPEED);
       } else {
         cursor.remove();
-        onAirBadge.classList.remove('active');
         isTyping = false;
         processTypingQueue();
       }
