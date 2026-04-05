@@ -385,7 +385,7 @@ body::after {
 
 .channels-panel {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   background: var(--bg-panel);
   border: 1px solid rgba(232, 163, 23, 0.1);
   border-radius: 6px;
@@ -400,7 +400,7 @@ body::after {
 .channel {
   padding: 14px 16px;
 }
-.channel:first-child {
+.channel:not(:last-child) {
   border-right: 1px solid rgba(232, 163, 23, 0.05);
 }
 
@@ -457,6 +457,18 @@ body::after {
   color: var(--text-dim);
 }
 
+.channel-toggle.tones-on {
+  border-color: var(--amber);
+  color: var(--amber);
+  box-shadow: 0 0 8px var(--amber-glow);
+}
+.channel-toggle.tones-on:hover { background: var(--amber-glow); }
+
+.channel-toggle.tones-off {
+  border-color: var(--text-dim);
+  color: var(--text-dim);
+}
+
 .skip-btn {
   font-family: var(--font-mono);
   font-size: 0.6rem;
@@ -490,7 +502,8 @@ body::after {
   .now-playing-title { font-size: 1.2rem; }
   .volume-slider { width: 60px; }
   .channels-panel { grid-template-columns: 1fr; }
-  .channel:first-child { border-right: none; border-bottom: 1px solid rgba(232, 163, 23, 0.05); }
+  .channel { border-right: none !important; border-bottom: 1px solid rgba(232, 163, 23, 0.05); }
+  .channel:last-child { border-bottom: none; }
 }
 </style>
 </head>
@@ -550,6 +563,12 @@ body::after {
         </div>
         <div class="text-only-indicator" id="textOnlyIndicator" style="display:none">text only</div>
       </div>
+      <div class="channel">
+        <div class="channel-label" id="tonesLabel">TONES</div>
+        <div class="channel-controls">
+          <button class="channel-toggle" id="tonesToggle" aria-label="Toggle tones"></button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -597,12 +616,16 @@ body::after {
   var voiceToggle = document.getElementById('voiceToggle');
   var voiceLabel = document.getElementById('voiceLabel');
   var textOnlyIndicator = document.getElementById('textOnlyIndicator');
+  var tonesToggle = document.getElementById('tonesToggle');
+  var tonesLabel = document.getElementById('tonesLabel');
 
   // Static SVG icon markup (no user content ever flows into these)
   var ICON_PAUSE = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" fill="currentColor"/><rect x="14" y="4" width="4" height="16" fill="currentColor"/></svg>';
   var ICON_PLAY = '<svg viewBox="0 0 24 24"><polygon points="8,5 19,12 8,19" fill="currentColor"/></svg>';
   var ICON_VOICE_ON = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M16.24 7.76a6 6 0 010 8.49" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M7.76 16.24a6 6 0 010-8.49" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
   var ICON_VOICE_OFF = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2" fill="currentColor" opacity="0.5"/><line x1="5" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+  var ICON_TONES_ON = '<svg viewBox="0 0 24 24"><path d="M2 12c0 0 4-3 10-3s10 3 10 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M5 12c0 0 3-2 7-2s7 2 7 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>';
+  var ICON_TONES_OFF = '<svg viewBox="0 0 24 24"><path d="M2 12c0 0 4-3 10-3s10 3 10 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/><circle cx="12" cy="12" r="1.5" fill="currentColor" opacity="0.5"/><line x1="5" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 
   // --- Utilities ---
 
@@ -624,7 +647,8 @@ body::after {
   var state = {
     connected: false,
     musicPlaying: true,
-    announcementsOn: true
+    announcementsOn: true,
+    tonesOn: true
   };
 
   // --- Audio ---
@@ -744,10 +768,25 @@ body::after {
     });
   }
 
+  function toggleTones() {
+    if (!state.connected) return;
+    var endpoint = state.tonesOn ? '/mute-tones' : '/unmute-tones';
+    tonesToggle.disabled = true;
+    fetch(endpoint, { method: 'POST' }).then(function(r) {
+      return r.json();
+    }).then(function(data) {
+      state.tonesOn = !data.muted;
+      updateUI();
+    }).catch(function() {}).finally(function() {
+      tonesToggle.disabled = false;
+    });
+  }
+
   function syncServerState() {
     fetch('/now-playing').then(function(r) { return r.json(); }).then(function(data) {
       if (typeof data.muted === 'boolean') state.musicPlaying = !data.muted;
       if (typeof data.announcements_muted === 'boolean') state.announcementsOn = !data.announcements_muted;
+      if (typeof data.tones_muted === 'boolean') state.tonesOn = !data.tones_muted;
       updateNowPlaying(data);
       updateUI();
     }).catch(function() {});
@@ -788,6 +827,14 @@ body::after {
     voiceToggle.classList.toggle('voice-off', !state.announcementsOn);
     voiceToggle.setAttribute('aria-label', state.announcementsOn ? 'Mute announcements' : 'Unmute announcements');
     textOnlyIndicator.style.display = (!state.connected || state.announcementsOn) ? 'none' : '';
+
+    // Tones channel
+    tonesLabel.style.color = (!state.connected || !state.tonesOn) ? 'var(--text-dim)' : '';
+    // Safe: only static SVG icon constants, no user content
+    tonesToggle.innerHTML = state.tonesOn ? ICON_TONES_ON + ' ON' : ICON_TONES_OFF + ' OFF';
+    tonesToggle.classList.toggle('tones-on', state.tonesOn);
+    tonesToggle.classList.toggle('tones-off', !state.tonesOn);
+    tonesToggle.setAttribute('aria-label', state.tonesOn ? 'Mute tones' : 'Unmute tones');
   }
 
   // --- Event Listeners ---
@@ -796,6 +843,7 @@ body::after {
   disconnectBtn.addEventListener('click', disconnect);
   musicToggle.addEventListener('click', toggleMusic);
   voiceToggle.addEventListener('click', toggleAnnouncements);
+  tonesToggle.addEventListener('click', toggleTones);
 
   volumeSlider.addEventListener('input', function() {
     if (audio) audio.volume = this.value / 100;
@@ -840,6 +888,7 @@ body::after {
       updateNowPlaying(data);
       if (typeof data.muted === 'boolean') state.musicPlaying = !data.muted;
       if (typeof data.announcements_muted === 'boolean') state.announcementsOn = !data.announcements_muted;
+      if (typeof data.tones_muted === 'boolean') state.tonesOn = !data.tones_muted;
       updateUI();
     }).catch(function() {});
   }
@@ -972,6 +1021,10 @@ body::after {
           state.announcementsOn = !data.announcements_muted;
           updateUI();
         }
+        if (typeof data.tones_muted === 'boolean') {
+          state.tonesOn = !data.tones_muted;
+          updateUI();
+        }
       } catch(err) {}
     });
 
@@ -990,6 +1043,16 @@ body::after {
         var data = JSON.parse(e.data);
         if (typeof data.muted === 'boolean') {
           state.announcementsOn = !data.muted;
+          updateUI();
+        }
+      } catch(err) {}
+    });
+
+    es.addEventListener('tones-mute', function(e) {
+      try {
+        var data = JSON.parse(e.data);
+        if (typeof data.muted === 'boolean') {
+          state.tonesOn = !data.muted;
           updateUI();
         }
       } catch(err) {}
