@@ -2,9 +2,9 @@
 
 Inspired by [WRIT-FM](https://github.com/keltokhy/writ-fm), a 24/7 AI-powered internet radio station.
 
-![Agent Radio Dashboard](assets/dashboard.png)
-
 A LAN radio station that gives you ambient audio awareness of your AI coding agents. Music plays continuously. When agents finish tasks, hit errors, or need attention, a voice announces it over the stream. You hear what's happening from the kitchen, the couch, or wherever you are.
+
+![Agent Radio Dashboard](assets/dashboard.png)
 
 ## How it works
 
