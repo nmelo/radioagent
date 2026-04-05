@@ -292,18 +292,29 @@ def _parse_liquidsoap_metadata(raw: str) -> dict[str, str]:
 
 
 def get_next_track(socket_path: Path) -> dict | None:
-    """Query Liquidsoap for the next prefetched track's metadata."""
+    """Query Liquidsoap for the next prefetched track's metadata.
+
+    Supports both Liquidsoap 2.2 (request.on_air + request.alive) and
+    2.3+ (request.all) by trying the 2.2 API first and falling back.
+    """
+    # Try Liquidsoap 2.2: request.on_air + request.alive
     on_air = query_liquidsoap(socket_path, "request.on_air")
-    if not on_air:
-        return None
+    if on_air and "ERROR" not in on_air.upper():
+        alive = query_liquidsoap(socket_path, "request.alive")
+        if not alive:
+            return None
+        on_air_rids = set(on_air.strip().split())
+        alive_rids = alive.strip().split()
+        next_rids = [rid for rid in alive_rids if rid not in on_air_rids]
+    else:
+        # Liquidsoap 2.3+: request.on_air removed, use request.all
+        all_rids_raw = query_liquidsoap(socket_path, "request.all")
+        if not all_rids_raw or "ERROR" in all_rids_raw.upper():
+            return None
+        rids = all_rids_raw.strip().split()
+        # First RID is the on-air track, rest are prefetched
+        next_rids = rids[1:] if len(rids) >= 2 else []
 
-    alive = query_liquidsoap(socket_path, "request.alive")
-    if not alive:
-        return None
-
-    on_air_rids = set(on_air.strip().split())
-    alive_rids = alive.strip().split()
-    next_rids = [rid for rid in alive_rids if rid not in on_air_rids]
     if not next_rids:
         return None
 
