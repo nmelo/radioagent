@@ -3,26 +3,32 @@
 ## 1. Module Structure
 
 ```
-agent-radio/
-  brain.py                    # Main entry point: webhook server + orchestration
-  config.py                   # YAML config loading and validation
+agent-radio/                    # Flat structure at repo root
+  brain.py                    # Main entry point: FastAPI server + orchestration
+  config.py                   # YAML config loading with RadioConfig dataclass
   script_generator.py         # Event JSON -> natural-language announcement text
+  dashboard.html              # Single-file web UI (served by brain at GET /)
   tts/
-    __init__.py               # TTS interface (render function)
-    kokoro_engine.py          # Kokoro TTS implementation
-    orpheus_engine.py         # Orpheus TTS implementation (post-MVP)
+    __init__.py               # TTSEngine Protocol definition
+    kokoro_engine.py          # Kokoro 82M TTS implementation
   music/
-    __init__.py
-    ai_generator.py           # MusicGen background generation (post-MVP)
+    __init__.py               # Placeholder (AI generation is post-MVP)
   radio.liq                   # Liquidsoap configuration
   config.yaml                 # Runtime configuration
-  start.sh                    # Starts Icecast + Liquidsoap + brain
-  stop.sh                     # Stops all processes
-  pyproject.toml              # Python dependencies (uv managed)
+  config.yaml.example         # Config template
+  start.sh                    # Starts Icecast + Liquidsoap + brain with health checks
+  stop.sh                     # Graceful shutdown in reverse order
+  pyproject.toml              # Python 3.12+ dependencies
+  README.md                   # Quick start guide
   config/
-    icecast.xml.example       # Icecast config template
-  music/                      # Curated ambient music library (operator-provided)
+    icecast.xml               # Icecast server configuration
+  tests/                      # pytest test suite
+  docs/                       # PRD, spec, system design, roadmap, evaluations
 ```
+
+**Note:** Music files live at `/home/nmelo/Music` on workbench (hardcoded in radio.liq). The `config.yaml` `music_dir` field is used by config validation but Liquidsoap reads its own path directly.
+
+**Deployment:** Clone repo to `/opt/agent-radio` on workbench. Create venv, install dependencies. Icecast managed by systemd. Liquidsoap and brain managed by start.sh/stop.sh.
 
 **Dependency graph:**
 ```
@@ -30,11 +36,12 @@ brain.py
   +-- config.py (reads config.yaml)
   +-- script_generator.py (event -> text)
   +-- tts/ (text -> WAV file)
+  +-- dashboard.html (served at GET /)
   +-- Liquidsoap (WAV file -> audio stream, via Unix socket)
-  +-- Icecast (MP3 stream -> HTTP listeners, managed by Liquidsoap)
+  +-- Icecast (MP3 stream -> HTTP listeners, queried for now-playing metadata)
 ```
 
-The brain has no dependency on Liquidsoap internals. It communicates via the Unix socket protocol (text commands). The brain has no dependency on Icecast. Liquidsoap manages the Icecast connection.
+The brain communicates with Liquidsoap via Unix socket protocol (text commands) for voice push, skip, metadata queries, and music volume control. The brain queries Icecast's `/status-json.xsl` endpoint for current track metadata (title, artist from ICY tags).
 
 ## 2. Data Structures
 
@@ -50,7 +57,7 @@ class RadioConfig:
 
     # TTS
     tts_engine: str = "kokoro"          # "kokoro" or "orpheus"
-    tts_voice: str = "am_michael"
+    tts_voice: str = "am_michael"       # Production uses "af_heart"
     tts_speed: float = 1.0
 
     # Webhook
@@ -64,7 +71,7 @@ class RadioConfig:
     icecast_host: str = "localhost"
     icecast_port: int = 8000
     icecast_mount: str = "/stream"
-    icecast_password: str = "changeme"
+    icecast_password: str = "changeme"   # Production uses "agent-radio-src"
 
     # Announcements
     suppress_kinds: list[str] = field(default_factory=lambda: ["*.idle", "*.message"])

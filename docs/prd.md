@@ -57,18 +57,18 @@ Team members who want to monitor shared agent sessions remotely. CI/CD operators
 ### 5.1 Start the Radio
 
 ```
-$ cd ~/agent-radio
+$ ssh workbench
+$ cd /opt/agent-radio
 $ ./start.sh
-[agent-radio] Starting Icecast...
-[agent-radio] Starting Liquidsoap...
-[agent-radio] Starting brain...
-[agent-radio] Music: curated library (GPU warming up for AI generation)
-[agent-radio] TTS: kokoro (am_michael)
-[agent-radio] Streaming at http://192.168.1.100:8000/stream
-[agent-radio] Webhook endpoint at http://192.168.1.100:8001/announce
+[agent-radio] Icecast already running (systemd), adopting
+[agent-radio] Starting Liquidsoap... socket ready
+[agent-radio] Starting brain... listening on :8001
+[agent-radio] Stream: http://192.168.1.100:8000/stream
+[agent-radio] Webhook: http://192.168.1.100:8001/announce
+[agent-radio] Dashboard: http://192.168.1.100:8001/
 ```
 
-Operator opens `http://192.168.1.100:8000/stream` in a browser tab. Ambient music starts playing.
+Operator opens `http://192.168.1.100:8001/` in a browser. The dashboard shows a Connect button. Click it to start listening. Ambient music plays from the curated library (~/ Music on workbench). The wire feed shows announcement history and live events.
 
 ### 5.2 Announcement Arrives
 
@@ -87,11 +87,22 @@ The listener hears:
 - A calm voice says: "eng1 finished the auth refactor"
 - Music gently fades back up over ~1 second
 
-### 5.3 GPU Becomes Unavailable
+### 5.3 Using the Dashboard
 
-MusicGen is generating ambient clips on the GPU. Another process claims GPU memory. MusicGen fails with CUDA OOM. Brain logs a warning and stops generating new clips. Liquidsoap continues playing from existing curated and pre-generated files. The listener hears no interruption. When the GPU is free again, brain resumes AI music generation.
+The operator opens `http://192.168.1.100:8001/` in a browser. The dashboard shows:
 
-### 5.4 Manual Announcement
+- **Now Playing**: current track title, artist, album (from Icecast metadata). A Skip button advances to the next track.
+- **Up Next**: the next track in the shuffle queue.
+- **Wire Feed**: live announcement text with a typing animation as voice plays. Previous announcements fade with age. Failure events get a red accent.
+- **Player Controls**: Connect/Disconnect (stream transport), Music Play/Pause (server-side mute), Voice On/Off (announcement mute), Volume (client-side).
+
+When an announcement arrives, the ON AIR badge pulses red, music ducks, and the announcement text types out character by character in the wire feed.
+
+### 5.4 GPU Becomes Unavailable (Post-MVP)
+
+This journey applies when AI music generation is enabled. MusicGen fails with CUDA OOM. Brain logs a warning and stops generating new clips. Liquidsoap continues playing from the curated library. The listener hears no interruption. When the GPU is free again, brain resumes AI music generation.
+
+### 5.5 Manual Announcement
 
 ```
 $ curl -X POST http://192.168.1.100:8001/announce \
@@ -99,7 +110,7 @@ $ curl -X POST http://192.168.1.100:8001/announce \
     -d '{"detail": "Phase 3 is complete. Shipping v1.7.0."}'
 ```
 
-The listener hears the announcement within seconds.
+The listener hears the announcement within seconds. The dashboard wire feed shows the text simultaneously.
 
 ## 6. Risks
 
@@ -114,27 +125,28 @@ The listener hears the announcement within seconds.
 
 ## 7. Scope Boundaries
 
-### 7.1 MVP Scope (Build This)
+### 7.1 MVP Scope (Shipped)
 
-- Continuous music playback via Liquidsoap + Icecast
-- Curated music library support (operator provides ambient MP3/FLAC/WAV files)
-- HTTP webhook endpoint for receiving announcement events
-- Event-to-script translation (JSON -> natural language sentence)
-- TTS generation (Kokoro, pluggable for Orpheus later)
-- Voice announcement injection into Liquidsoap via request queue
-- Automatic music ducking during announcements (Liquidsoap smooth_add)
-- Configuration via YAML file
-- Start/stop scripts
+- Continuous music playback via Liquidsoap + Icecast (curated library from ~/Music on workbench)
+- HTTP webhook endpoint for receiving announcement events (POST /announce)
+- Event-to-script translation via template-based script generator (JSON -> natural language)
+- TTS generation via Kokoro 82M (pluggable TTSEngine protocol for future engines)
+- Voice announcement injection with automatic music ducking (Liquidsoap smooth_add)
+- Configuration via YAML file (config.yaml)
+- Start/stop scripts with process monitoring and health checks
+- Web dashboard with now-playing, wire feed (typing animation), skip, mute/unmute, volume
+- Server-Sent Events for real-time dashboard updates
+- Stream metadata via Icecast status API
 
 ### 7.2 Post-MVP (Build Later, If Needed)
 
-- AI music generation via MusicGen (drops clips into playlist directory)
+- AI music generation via MusicGen (tested, not enabled by default)
 - Scheduled programming (different moods by time of day)
 - Station ID jingles between announcements
 - Announcement priority levels (critical events get different TTS treatment)
-- Stream metadata updates (now-playing info)
-- Multiple TTS engine support (Orpheus for high-quality, Kokoro for speed)
-- Web UI showing now-playing, recent announcements, stream status
+- Multiple TTS engine support (Orpheus 3B, Fish Speech; see docs/tts-evaluation.md)
+- Announcement mute/unmute (independent from music mute)
+- Three-layer dashboard controls (connect/disconnect, music, voice)
 
 ### 7.3 Never Build
 

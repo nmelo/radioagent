@@ -4,11 +4,12 @@
 
 Agent Radio is a continuously playing audio stream that combines ambient music with voice announcements. External systems send events via HTTP webhook. Each event is translated to a natural-language sentence, rendered as speech by a TTS engine, and crossfaded into the music stream. Listeners connect via any HTTP audio client.
 
-The system has two processes:
-- **Brain** (Python): receives events, generates scripts, renders TTS, pushes voice clips to the audio engine, manages AI music generation
+The system has three processes:
+- **Brain** (Python/FastAPI): receives events, generates scripts, renders TTS, pushes voice clips to the audio engine, serves the web dashboard and API
 - **Audio Engine** (Liquidsoap): plays music, ducks volume for voice announcements, encodes MP3, streams to Icecast
+- **Icecast**: HTTP streaming server, serves MP3 to listeners
 
-The brain is the intelligence. Liquidsoap is the audio pipeline. They communicate via Unix socket (brain pushes WAV files to Liquidsoap's request queue).
+The brain is the intelligence. Liquidsoap is the audio pipeline. They communicate via Unix socket (brain pushes WAV files to Liquidsoap's request queue). The brain also serves a web dashboard at `GET /` with real-time updates via Server-Sent Events.
 
 ## 2. Components
 
@@ -65,18 +66,19 @@ Suppressed events produce no announcement. The `*.idle` kind is suppressed by de
 
 Generates speech audio from text. Pluggable interface with two implementations:
 
-**Kokoro (default):**
+**Kokoro (default, shipped):**
 - 82M parameter model, runs on CPU or GPU
 - 200x+ real-time on GPU, 3-5x on CPU
-- 54 built-in voices, configurable via `tts.voice` config
-- Output: WAV file (44.1kHz, 16-bit, mono)
-- 10-second announcement generates in ~50ms on GPU
+- 54 built-in voices, configurable via `tts_voice` in config.yaml (default: `af_heart`)
+- Output: WAV file (24kHz, 16-bit, mono). Liquidsoap resamples to 44.1kHz for streaming.
+- 10-second announcement generates in ~50ms on RTX 5080
+- Voice clips are amplified 3.5x in Liquidsoap to match music loudness
 
-**Orpheus (optional, future):**
-- 3B parameter model, requires GPU with FP8 quantization (~10GB VRAM)
-- Professional voice modes with emotion tags
-- Zero-shot voice cloning from reference audio
-- 10-second announcement generates in 3-7 seconds
+**Orpheus (optional, future, see docs/tts-evaluation.md):**
+- 3B parameter model, requires GPU with FP8 quantization (~9GB VRAM)
+- 8 English voices + emotion tags (laugh, sigh, etc.) + zero-shot voice cloning
+- 10-second announcement generates in 5-10 seconds (100x slower than Kokoro)
+- Not prioritized for Phase 2 due to latency; revisit in Phase 3
 
 **Interface:**
 ```
@@ -143,16 +145,51 @@ Standard Icecast2 installation serving MP3 streams on port 8000. Configuration i
 
 Listeners connect via `http://<host>:8000/stream`. Supports MP3 with ICY metadata for now-playing information.
 
+### 2.7 Web Dashboard
+
+Single HTML file (`dashboard.html`) served by the brain at `GET /`. Inline CSS and vanilla JS, no build tools, no external dependencies except Google Fonts (DM Mono, DM Sans, Instrument Serif).
+
+**Features:**
+- Now Playing: current track title/artist/album from Icecast metadata, Skip button
+- Up Next: next track in the shuffle queue
+- Wire Feed: live announcement text with character-by-character typing animation, blinking cursor, age-faded opacity, failure event red accents
+- Player Controls: play/pause (server-side music mute), volume slider (client-side), mute toggle
+- ON AIR badge: pulses red during active announcements
+- Auto-reconnect: exponential backoff (2s to 30s) on stream failure
+
+**Data sources:**
+- `GET /now-playing` polled every 3 seconds (fallback)
+- `GET /events` SSE stream for real-time announcement and mute events
+- `GET /recent-announcements` loaded once on page open
+
+### 2.8 Brain API Endpoints
+
+The brain exposes the following HTTP endpoints (FastAPI on port 8001):
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/` | Serve dashboard.html |
+| `GET` | `/now-playing` | Current track metadata from Icecast + next track + mute state |
+| `GET` | `/recent-announcements` | Last 20 announcements (text, agent, kind, timestamp) |
+| `GET` | `/events` | SSE stream: announcement, now-playing, and mute events |
+| `POST` | `/announce` | Submit announcement event (detail required, kind/agent/project optional) |
+| `POST` | `/skip` | Skip current music track via Liquidsoap |
+| `POST` | `/mute` | Mute music (Liquidsoap volume=0.0), broadcast SSE |
+| `POST` | `/unmute` | Unmute music (Liquidsoap volume=1.0), broadcast SSE |
+
+All endpoints return JSON. CORS is enabled for all origins (LAN use).
+
 ## 3. Behaviors
 
 ### 3.1 Startup
 
-1. Operator starts Icecast (systemd or manual)
-2. Operator starts Liquidsoap with the radio config
-3. Operator starts the brain (`uv run python brain.py`)
-4. Brain validates config, connects to Liquidsoap socket, starts webhook server
+1. `./start.sh` checks for stale PID files and port conflicts
+2. Starts Icecast via systemd (or adopts existing instance)
+3. Starts Liquidsoap, waits up to 15 seconds for Unix socket
+4. Starts brain (`venv/bin/python -m brain`), waits up to 30 seconds for port 8001
 5. Music begins playing immediately from curated library
-6. Brain logs stream URL and webhook endpoint to console
+6. Brain logs stream URL, webhook endpoint, and dashboard URL
+7. Monitoring loop checks process health every 5 seconds
 
 ### 3.2 Announcement Flow
 
