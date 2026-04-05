@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends icecast2 \
+    && apt-get install -y --no-install-recommends icecast2 wget \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /var/log/icecast2 \
     && chown icecast2:icecast /var/log/icecast2
