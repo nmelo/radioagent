@@ -30,9 +30,42 @@ from script_generator import WebhookEvent, generate_script
 from tts import TTSEngine
 from tts.kokoro_engine import KokoroEngine
 
+from fnmatch import fnmatch
+
 logger = logging.getLogger(__name__)
 
 WAV_DIR = Path("/tmp/agent-radio")
+
+
+# --- Tone routing ---
+
+# Event kind glob -> tone WAV filename (without extension)
+_TONE_MAP = {
+    "*.started": "rise",
+    "*.completed": "resolve",
+    "*.failed": "dissonant",
+    "*.stuck": "pulse",
+    "*.idle": "hum",
+    "*.stopped": "descend",
+    "deploy.*": "bell",
+    "milestone.*": "chord_long",
+}
+
+# Event kinds that play a tone but skip voice (too frequent for TTS)
+_TONE_ONLY_KINDS = {"*.started", "*.stopped", "*.idle"}
+
+
+def get_tone_for_kind(kind: str) -> str | None:
+    """Return tone WAV name for an event kind, or None if no mapping."""
+    for pattern, tone_name in _TONE_MAP.items():
+        if fnmatch(kind, pattern):
+            return tone_name
+    return None
+
+
+def is_tone_only(kind: str) -> bool:
+    """Return True if this event kind plays tone but skips voice."""
+    return any(fnmatch(kind, p) for p in _TONE_ONLY_KINDS)
 
 
 # --- Data models ---
@@ -189,6 +222,26 @@ def push_to_liquidsoap(socket_path: Path, wav_path: Path, retries: int = 3) -> b
             if attempt < retries:
                 time.sleep(1)
     return False
+
+
+def push_tone_to_liquidsoap(socket_path: Path, wav_path: Path) -> bool:
+    """Push a tone WAV to Liquidsoap's tones queue. Single attempt, no retries."""
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(3.0)
+        s.connect(str(socket_path))
+        s.sendall(f"tones.push {wav_path}\r\n".encode())
+        resp = b""
+        while b"END" not in resp:
+            chunk = s.recv(1024)
+            if not chunk:
+                break
+            resp += chunk
+        s.close()
+        return True
+    except (socket.error, socket.timeout) as e:
+        logger.warning("Tone push failed: %s", e)
+        return False
 
 
 # --- Liquidsoap metadata query ---
@@ -386,6 +439,7 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
     sse_clients: list[asyncio.Queue] = []
     music_muted = False
     announcements_muted = False
+    tones_muted = False
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -425,6 +479,7 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         data = get_now_playing_from_icecast(config.icecast_host, config.icecast_port, config.icecast_mount)
         data["muted"] = music_muted
         data["announcements_muted"] = announcements_muted
+        data["tones_muted"] = tones_muted
         data["next"] = get_next_track(config.liquidsoap_socket)
         return data
 
@@ -477,6 +532,22 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         _broadcast_sse(sse_clients, "announcements-mute", {"muted": False})
         return {"status": "ok", "muted": False}
 
+    @app.post("/mute-tones")
+    def mute_tones():
+        nonlocal tones_muted
+        tones_muted = True
+        logger.info("Tones muted")
+        _broadcast_sse(sse_clients, "tones-mute", {"muted": True})
+        return {"status": "ok", "muted": True}
+
+    @app.post("/unmute-tones")
+    def unmute_tones():
+        nonlocal tones_muted
+        tones_muted = False
+        logger.info("Tones unmuted")
+        _broadcast_sse(sse_clients, "tones-mute", {"muted": False})
+        return {"status": "ok", "muted": False}
+
     @app.get("/events")
     async def events(request: Request):
         q: asyncio.Queue = asyncio.Queue(maxsize=50)
@@ -507,31 +578,55 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
 
     @app.post("/announce")
     def announce(req: AnnounceRequest):
-        # Run through script generator: clean, truncate, suppress
         event = WebhookEvent(detail=req.detail, kind=req.kind, agent=req.agent)
+
+        # --- Tone routing (independent of voice) ---
+        tone_name = get_tone_for_kind(req.kind)
+        tone_played = False
+        if tone_name and not tones_muted:
+            tone_path = config.tones_dir / f"{tone_name}.wav"
+            if tone_path.exists():
+                tone_played = push_tone_to_liquidsoap(config.liquidsoap_socket, tone_path)
+            else:
+                logger.warning("Tone file missing: %s", tone_path)
+
+        # --- Voice routing ---
+        tone_only = is_tone_only(req.kind)
+
         script = generate_script(
             event,
             suppress_kinds=config.suppress_kinds,
             max_words=config.max_announcement_words,
         )
-        if script is None:
+
+        # Events suppressed for voice AND with no tone mapping are fully suppressed
+        if script is None and not tone_name:
             logger.info("Suppressed [%s] from %s", req.kind, req.agent or "unknown")
             return {"status": "suppressed"}
 
-        # Record in history and broadcast to SSE clients
+        # Record in history and broadcast to SSE (always, for any routed event)
+        display_text = script or req.detail
         record = {
-            "text": script,
+            "text": display_text,
             "agent": req.agent,
             "kind": req.kind,
             "timestamp": datetime.now().isoformat(),
         }
+        if tone_name:
+            record["tone"] = tone_name
         announcement_history.appendleft(record)
         _broadcast_sse(sse_clients, "announcement", record)
 
+        # Tone-only events: no voice, we're done
+        if tone_only or script is None:
+            return {"status": "tone_only", "tone": tone_name} if tone_name else {"status": "suppressed"}
+
+        # Voice muted: text recorded but no TTS
         if announcements_muted:
-            logger.info("Announcement muted, text only: %s", script[:60])
+            logger.info("Announcement muted, text only: %s", display_text[:60])
             return {"status": "muted"}
 
+        # Voice pipeline: TTS -> validate -> push
         entry = QueuedAnnouncement(
             text=script,
             kind=req.kind,

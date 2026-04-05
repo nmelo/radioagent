@@ -17,7 +17,12 @@ from brain import (
     process_announcement,
     create_app,
     get_now_playing_from_icecast,
+    get_next_track,
+    get_tone_for_kind,
+    is_tone_only,
+    push_tone_to_liquidsoap,
     query_liquidsoap,
+    _parse_liquidsoap_metadata,
 )
 
 
@@ -51,10 +56,16 @@ def _make_config(tmp_path):
     music = tmp_path / "music"
     music.mkdir()
     (music / "t.mp3").write_bytes(b"fake")
+    tones = tmp_path / "tones"
+    tones.mkdir()
+    # Create tone WAVs that the routing will look for
+    for name in ("rise", "resolve", "dissonant", "pulse", "hum", "descend", "bell", "chord_long"):
+        make_wav(tones / f"{name}.wav", duration=0.8)
     from config import RadioConfig
     return RadioConfig(
         music_dir=music,
         liquidsoap_socket=Path(tmp_path / "test.sock"),
+        tones_dir=tones,
         webhook_port=8001,
         icecast_password="test",
     )
@@ -271,6 +282,7 @@ class TestApp:
         mock_tts.render.side_effect = fake_render
 
         with patch("brain.push_to_liquidsoap", return_value=True), \
+             patch("brain.push_tone_to_liquidsoap", return_value=True), \
              patch("brain._schedule_wav_cleanup"):
             app = create_app(config, mock_tts)
             yield TestClient(app)
@@ -303,8 +315,8 @@ class TestApp:
         assert resp_drop.status_code == 429
 
     def test_suppressed_event(self, client):
-        """Events matching suppress_kinds should return suppressed status."""
-        resp = client.post("/announce", json={"detail": "idle event", "kind": "agent.idle"})
+        """Events matching suppress_kinds with no tone mapping return suppressed."""
+        resp = client.post("/announce", json={"detail": "chat msg", "kind": "agent.message"})
         assert resp.status_code == 200
         assert resp.json()["status"] == "suppressed"
 
@@ -389,8 +401,8 @@ class TestApp:
             html_path.unlink(missing_ok=True)
 
     def test_suppressed_not_in_history(self, client):
-        """Suppressed events should not appear in announcement history."""
-        client.post("/announce", json={"detail": "idle", "kind": "agent.idle"})
+        """Fully suppressed events (no tone, no voice) should not appear in history."""
+        client.post("/announce", json={"detail": "chat msg", "kind": "agent.message"})
         resp = client.get("/recent-announcements")
         assert resp.json() == []
 
@@ -478,3 +490,141 @@ class TestNowPlayingFromIcecast:
 
         assert result["title"] == "Track"
         assert result["artist"] == "Right"
+
+
+# --- Tone routing ---
+
+
+class TestToneRouting:
+    def test_get_tone_for_started(self):
+        assert get_tone_for_kind("agent.started") == "rise"
+
+    def test_get_tone_for_completed(self):
+        assert get_tone_for_kind("agent.completed") == "resolve"
+
+    def test_get_tone_for_failed(self):
+        assert get_tone_for_kind("bot.failed") == "dissonant"
+
+    def test_get_tone_for_stuck(self):
+        assert get_tone_for_kind("agent.stuck") == "pulse"
+
+    def test_get_tone_for_idle(self):
+        assert get_tone_for_kind("agent.idle") == "hum"
+
+    def test_get_tone_for_stopped(self):
+        assert get_tone_for_kind("agent.stopped") == "descend"
+
+    def test_get_tone_for_deploy(self):
+        assert get_tone_for_kind("deploy.production") == "bell"
+
+    def test_get_tone_for_milestone(self):
+        assert get_tone_for_kind("milestone.phase1") == "chord_long"
+
+    def test_no_tone_for_custom(self):
+        assert get_tone_for_kind("custom") is None
+
+    def test_no_tone_for_message(self):
+        assert get_tone_for_kind("agent.message") is None
+
+    def test_is_tone_only_started(self):
+        assert is_tone_only("agent.started") is True
+
+    def test_is_tone_only_stopped(self):
+        assert is_tone_only("agent.stopped") is True
+
+    def test_is_tone_only_idle(self):
+        assert is_tone_only("agent.idle") is True
+
+    def test_is_not_tone_only_completed(self):
+        assert is_tone_only("agent.completed") is False
+
+    def test_is_not_tone_only_deploy(self):
+        assert is_tone_only("deploy.staging") is False
+
+
+class TestToneApp:
+    @pytest.fixture
+    def client(self, tmp_path):
+        from fastapi.testclient import TestClient
+        config = _make_config(tmp_path)
+        mock_tts = MagicMock()
+        mock_tts.name = "mock"
+        def fake_render(text, output_path):
+            make_wav(output_path, duration=2.0)
+            return True
+        mock_tts.render.side_effect = fake_render
+
+        with patch("brain.push_to_liquidsoap", return_value=True), \
+             patch("brain.push_tone_to_liquidsoap", return_value=True), \
+             patch("brain._schedule_wav_cleanup"):
+            app = create_app(config, mock_tts)
+            yield TestClient(app)
+
+    def test_started_plays_tone_no_voice(self, client):
+        """agent.started should return tone_only with rise tone."""
+        resp = client.post("/announce", json={
+            "detail": "starting work", "kind": "agent.started", "agent": "eng1",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "tone_only"
+        assert data["tone"] == "rise"
+
+    def test_completed_plays_both(self, client):
+        """agent.completed should play voice (immediate) and tone."""
+        resp = client.post("/announce", json={
+            "detail": "finished the task", "kind": "agent.completed", "agent": "eng1",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "immediate"
+
+    def test_tone_only_still_in_history(self, client):
+        """Tone-only events should still appear in announcement history."""
+        client.post("/announce", json={
+            "detail": "starting work", "kind": "agent.started", "agent": "eng1",
+        })
+        resp = client.get("/recent-announcements")
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["tone"] == "rise"
+
+    def test_mute_tones(self, client):
+        resp = client.post("/mute-tones")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "muted": True}
+
+    def test_unmute_tones(self, client):
+        client.post("/mute-tones")
+        resp = client.post("/unmute-tones")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "muted": False}
+
+    def test_tones_muted_in_now_playing(self, client):
+        with patch("brain.get_now_playing_from_icecast", return_value={
+            "title": "Test", "artist": "", "album": "", "source_type": "music",
+        }), patch("brain.get_next_track", return_value=None):
+            resp = client.get("/now-playing")
+        assert resp.json()["tones_muted"] is False
+
+        client.post("/mute-tones")
+        with patch("brain.get_now_playing_from_icecast", return_value={
+            "title": "Test", "artist": "", "album": "", "source_type": "music",
+        }), patch("brain.get_next_track", return_value=None):
+            resp = client.get("/now-playing")
+        assert resp.json()["tones_muted"] is True
+
+    def test_custom_event_no_tone(self, client):
+        """Custom events should not play a tone."""
+        resp = client.post("/announce", json={
+            "detail": "manual message", "kind": "custom", "agent": "eng1",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "immediate"
+
+    def test_deploy_plays_both(self, client):
+        """deploy.* events should play both tone and voice."""
+        resp = client.post("/announce", json={
+            "detail": "deployed to prod", "kind": "deploy.production", "agent": "shipper",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "immediate"

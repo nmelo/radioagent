@@ -21,6 +21,9 @@ icecast_port: 8000
 icecast_mount: /stream
 icecast_password: changeme
 
+# Tones
+tones_dir: /opt/agent-radio/tones
+
 # Announcements
 suppress_kinds:
   - "*.idle"

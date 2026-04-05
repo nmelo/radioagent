@@ -41,6 +41,9 @@ class RadioConfig:
     icecast_mount: str = "/stream"
     icecast_password: str = "changeme"
 
+    # Tones
+    tones_dir: Path = field(default_factory=lambda: Path("/opt/agent-radio/tones"))
+
     # Announcements
     suppress_kinds: list[str] = field(default_factory=lambda: ["*.idle", "*.message"])
     max_announcement_words: int = 40
@@ -84,7 +87,7 @@ def load_config(path: str | Path = "config.yaml") -> RadioConfig:
             kwargs[key] = value
 
     # Convert Path fields from strings
-    for path_field in ("music_dir", "liquidsoap_socket"):
+    for path_field in ("music_dir", "liquidsoap_socket", "tones_dir"):
         if path_field in kwargs and isinstance(kwargs[path_field], str):
             kwargs[path_field] = Path(kwargs[path_field])
 
