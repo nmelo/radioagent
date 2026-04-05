@@ -765,13 +765,15 @@ footer a:hover {
 
 <script>
 function copySetup() {
-  var text = 'To set up Radio Agent for your coding agents, install these two skills:\n\n' +
-    '1. Setup skill (one-time connection config):\n' +
+  var text = 'To use Radio Agent with your coding agents:\n\n' +
+    '1. Install Radio Agent (if you haven\'t already):\n' +
+    '   curl -sSL https://radioagent.live/install.sh | bash\n\n' +
+    '2. Install the agent skills:\n' +
     '   git clone https://github.com/nmelo/radioagent.git /tmp/radioagent-skills\n' +
-    '   cp -r /tmp/radioagent-skills/skills/setup ~/.claude/skills/radioagent-setup\n\n' +
-    '2. DJ skill (creative announcements):\n' +
+    '   cp -r /tmp/radioagent-skills/skills/setup ~/.claude/skills/radioagent-setup\n' +
     '   cp -r /tmp/radioagent-skills/skills/dj ~/.claude/skills/dj\n\n' +
-    'Then tell your agent: run /radioagent-setup to connect to your Radio Agent instance.';
+    '3. Tell your agent: run /radioagent-setup\n' +
+    '   It will ask for your Radio Agent host and configure everything.';
   var btn = document.getElementById('copySetupBtn');
   navigator.clipboard.writeText(text).then(function() {
     var original = btn.textContent;
