@@ -6,6 +6,9 @@ __pycache__/
 venv/
 *.egg-info/
 
+# Environment
+.env
+
 # Initech (contains secrets: Slack tokens, webhook URLs)
 initech.yaml
 .initech/
