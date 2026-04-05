@@ -2,42 +2,49 @@
 
 Inspired by [WRIT-FM](https://github.com/keltokhy/writ-fm), a 24/7 AI-powered internet radio station.
 
+**[radioagent.live](https://radioagent.live)**
+
 A LAN radio station that gives you ambient audio awareness of your AI coding agents. Music plays continuously. When agents finish tasks, hit errors, or need attention, a voice announces it over the stream. You hear what's happening from the kitchen, the couch, or wherever you are.
 
 https://github.com/user-attachments/assets/5dd0feb8-326b-4537-976c-0bda534da10d
 
-
-## How it works
-
-1. Ambient music plays via Liquidsoap + Icecast
-2. External systems POST events to a webhook
-3. The Brain translates events to speech via Kokoro TTS
-4. Liquidsoap ducks the music and plays the announcement
-5. Any HTTP audio client connects to the stream
-
 ## Quick start
 
+### Docker (all platforms)
+
 ```bash
-# On the streaming server (Ubuntu + GPU for TTS)
-git clone https://github.com/nmelo/agent-radio.git /opt/agent-radio
-cd /opt/agent-radio
-cp config.yaml.example config.yaml  # edit passwords
-
-# Install deps
-python3 -m venv venv
-venv/bin/pip install fastapi uvicorn pyyaml kokoro soundfile
-
-# Start (requires Icecast2 and Liquidsoap 2.2+ already installed)
-sudo systemctl start icecast2
-liquidsoap radio.liq &
-venv/bin/python brain.py &
+git clone https://github.com/nmelo/agent-radio.git
+cd agent-radio
+docker compose up
 ```
 
-Listen: `http://<host>:8000/stream`
+### Linux bare-metal
 
-Dashboard: `http://<host>:8001/`
+```bash
+git clone https://github.com/nmelo/agent-radio.git
+cd agent-radio
+./install.sh
+```
 
-Announce: `curl -X POST http://<host>:8001/announce -H 'Content-Type: application/json' -d '{"detail":"Hello from Agent Radio"}'`
+Listen: `http://localhost:8000/stream`
+Dashboard: `http://localhost:8001/`
+
+Send an announcement:
+```bash
+curl -X POST http://localhost:8001/announce \
+  -H 'Content-Type: application/json' \
+  -d '{"detail":"Hello from Agent Radio"}'
+```
+
+## Three audio channels
+
+| Channel | Purpose | Attention level |
+|---------|---------|----------------|
+| **Music** | Continuous ambient playback | Peripheral |
+| **Voice** | Spoken announcements via TTS | Center-pull |
+| **Tones** | Short sound effects for state changes | Peripheral |
+
+Music sits in the background. Voice announcements duck the music and pull your attention briefly. Tones give you a sense of agent activity without words. After a day of listening, you stop consciously hearing the tones but you know when agents are busy.
 
 ## Architecture
 
@@ -48,18 +55,23 @@ webhook POST -> Brain (FastAPI) -> Kokoro TTS -> WAV file
 Music dir -> Liquidsoap [playlist + crossfade + smooth_add] -> Icecast -> listeners
 ```
 
-Two processes. Brain handles webhooks, TTS, and pushes WAV paths to Liquidsoap via Unix socket. Liquidsoap handles all audio: mixing, ducking, encoding, streaming. They communicate over a socket. If Brain crashes, music keeps playing.
+Two processes. Brain handles webhooks, TTS, and pushes WAV paths to Liquidsoap via Unix socket. Liquidsoap handles all audio mixing, ducking, encoding, and streaming. If Brain crashes, music keeps playing.
 
 ## Stack
 
-- **Python 3.11+** with FastAPI/uvicorn
-- **Kokoro TTS** (82M params, 50ms per clip on GPU)
+- **Python 3.12** with FastAPI/uvicorn
+- **Kokoro TTS** (82M params, 50ms per clip on GPU, works on CPU too)
 - **Liquidsoap 2.2+** for audio mixing and streaming
 - **Icecast2** for HTTP audio delivery
 
-## Config
+## DJ Skill
 
-See `config.yaml.example`. Key settings: `music_dir`, `tts_voice`, `webhook_port`, `icecast_password`.
+Agent Radio ships with a Claude Code skill that transforms robotic announcements into creative radio callouts. Install it and your agents become DJs.
+
+```bash
+# Download from the dashboard or copy from skills/dj/
+cp -r skills/dj ~/.claude/skills/dj
+```
 
 ## Webhook API
 
@@ -69,7 +81,7 @@ curl -X POST http://host:8001/announce \
   -H 'Content-Type: application/json' \
   -d '{"detail":"Phase 1 is complete"}'
 
-# With agent and event kind (triggers templates)
+# With agent and event kind (triggers voice + tone)
 curl -X POST http://host:8001/announce \
   -H 'Content-Type: application/json' \
   -d '{"detail":"Auth refactor done","agent":"eng1","kind":"agent.completed"}'
