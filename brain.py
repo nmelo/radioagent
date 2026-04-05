@@ -494,6 +494,15 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
             return FileResponse(skill_path, filename="dj.skill", media_type="application/octet-stream")
         return JSONResponse(status_code=404, content={"error": "dj.skill not found"})
 
+    @app.get("/tones/{name}.wav")
+    def serve_tone(name: str):
+        if not all(c.isalnum() or c == '_' for c in name):
+            return JSONResponse(status_code=400, content={"error": "invalid tone name"})
+        tone_path = config.tones_dir / f"{name}.wav"
+        if tone_path.exists():
+            return FileResponse(tone_path, media_type="audio/wav")
+        return JSONResponse(status_code=404, content={"error": "tone not found"})
+
     @app.get("/now-playing")
     def now_playing():
         data = get_now_playing_from_icecast(config.icecast_host, config.icecast_port, config.icecast_mount)
