@@ -1,0 +1,18 @@
+[Unit]
+Description=Agent Radio - Brain (webhook + TTS + dashboard)
+After=agent-radio-liquidsoap.service
+Requires=agent-radio-liquidsoap.service
+
+[Service]
+Type=simple
+User=nmelo
+WorkingDirectory=/opt/agent-radio
+ExecStart=/opt/agent-radio/venv/bin/python -m brain
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

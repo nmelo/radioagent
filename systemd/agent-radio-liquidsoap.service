@@ -1,0 +1,17 @@
+[Unit]
+Description=Agent Radio - Liquidsoap Audio Engine
+After=icecast2.service
+Wants=icecast2.service
+
+[Service]
+Type=simple
+User=nmelo
+WorkingDirectory=/opt/agent-radio
+ExecStart=/usr/bin/liquidsoap /opt/agent-radio/radio.liq
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
