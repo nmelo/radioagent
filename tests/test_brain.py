@@ -482,6 +482,58 @@ class TestApp:
             resp = client.get("/now-playing")
         assert resp.json()["muted"] is False
 
+    def test_mute_announcements(self, client):
+        """POST /mute-announcements sets announcements_muted=True."""
+        resp = client.post("/mute-announcements")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "muted": True}
+
+    def test_unmute_announcements(self, client):
+        """POST /unmute-announcements sets announcements_muted=False."""
+        client.post("/mute-announcements")
+        resp = client.post("/unmute-announcements")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "muted": False}
+
+    def test_muted_announcement_skips_tts(self, client):
+        """When announcements muted, POST /announce returns muted and skips TTS."""
+        client.post("/mute-announcements")
+        resp = client.post("/announce", json={"detail": "test muted", "agent": "eng1"})
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "muted"
+
+    def test_muted_announcement_still_in_history(self, client):
+        """Muted announcements still appear in history."""
+        client.post("/mute-announcements")
+        client.post("/announce", json={"detail": "visible in history", "agent": "eng1"})
+        resp = client.get("/recent-announcements")
+        data = resp.json()
+        assert len(data) == 1
+        assert "visible in history" in data[0]["text"]
+
+    def test_unmuted_announcement_resumes_tts(self, client):
+        """After unmuting, announcements go through TTS again."""
+        client.post("/mute-announcements")
+        client.post("/unmute-announcements")
+        resp = client.post("/announce", json={"detail": "back to normal", "agent": "eng1"})
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "immediate"
+
+    def test_announcements_muted_in_now_playing(self, client):
+        """GET /now-playing includes announcements_muted field."""
+        with patch("brain.get_now_playing_from_icecast", return_value={
+            "title": "Test", "artist": "", "album": "", "source_type": "music",
+        }), patch("brain.get_next_track", return_value=None):
+            resp = client.get("/now-playing")
+        assert resp.json()["announcements_muted"] is False
+
+        client.post("/mute-announcements")
+        with patch("brain.get_now_playing_from_icecast", return_value={
+            "title": "Test", "artist": "", "album": "", "source_type": "music",
+        }), patch("brain.get_next_track", return_value=None):
+            resp = client.get("/now-playing")
+        assert resp.json()["announcements_muted"] is True
+
 
 # --- Icecast metadata ---
 

@@ -385,6 +385,7 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
     announcement_history: deque[dict] = deque(maxlen=20)
     sse_clients: list[asyncio.Queue] = []
     music_muted = False
+    announcements_muted = False
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -423,6 +424,7 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
     def now_playing():
         data = get_now_playing_from_icecast(config.icecast_host, config.icecast_port, config.icecast_mount)
         data["muted"] = music_muted
+        data["announcements_muted"] = announcements_muted
         data["next"] = get_next_track(config.liquidsoap_socket)
         return data
 
@@ -457,6 +459,22 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         music_muted = False
         logger.info("Music unmuted")
         _broadcast_sse(sse_clients, "mute", {"muted": False})
+        return {"status": "ok", "muted": False}
+
+    @app.post("/mute-announcements")
+    def mute_announcements():
+        nonlocal announcements_muted
+        announcements_muted = True
+        logger.info("Announcements muted")
+        _broadcast_sse(sse_clients, "announcements-mute", {"muted": True})
+        return {"status": "ok", "muted": True}
+
+    @app.post("/unmute-announcements")
+    def unmute_announcements():
+        nonlocal announcements_muted
+        announcements_muted = False
+        logger.info("Announcements unmuted")
+        _broadcast_sse(sse_clients, "announcements-mute", {"muted": False})
         return {"status": "ok", "muted": False}
 
     @app.get("/events")
@@ -509,6 +527,10 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         }
         announcement_history.appendleft(record)
         _broadcast_sse(sse_clients, "announcement", record)
+
+        if announcements_muted:
+            logger.info("Announcement muted, text only: %s", script[:60])
+            return {"status": "muted"}
 
         entry = QueuedAnnouncement(
             text=script,
