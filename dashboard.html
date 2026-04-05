@@ -442,14 +442,15 @@ body::after {
   color: var(--text-dim);
 }
 .channel-toggle:disabled { opacity: 0.5; cursor: default; }
+.channel-toggle.loading { opacity: 1; border-color: var(--amber); }
 .channel-toggle .spinner {
   display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 1.5px solid var(--text-dim);
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(232, 163, 23, 0.25);
   border-top-color: var(--amber);
   border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  animation: spin 0.5s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .channel-toggle svg { width: 14px; height: 14px; flex-shrink: 0; }
@@ -897,6 +898,7 @@ body::after {
     if (!state.connected) return;
     var endpoint = state.musicPlaying ? '/mute' : '/unmute';
     musicToggle.disabled = true;
+    musicToggle.classList.add('loading');
     // Safe: static HTML spinner element, no user content
     musicToggle.innerHTML = '<span class="spinner"></span>';
     fetch(endpoint, { method: 'POST' }).then(function(r) {
@@ -904,10 +906,12 @@ body::after {
     }).then(function(data) {
       setTimeout(function() {
         state.musicPlaying = !data.muted;
+        musicToggle.classList.remove('loading');
         updateUI();
         musicToggle.disabled = false;
       }, 2000);
     }).catch(function() {
+      musicToggle.classList.remove('loading');
       updateUI();
       musicToggle.disabled = false;
     });
