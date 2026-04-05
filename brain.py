@@ -337,6 +337,7 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
     drain_task = None
     announcement_history: deque[dict] = deque(maxlen=20)
     sse_clients: list[asyncio.Queue] = []
+    music_muted = False
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -373,7 +374,9 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
 
     @app.get("/now-playing")
     def now_playing():
-        return get_now_playing_from_icecast(config.icecast_host, config.icecast_port, config.icecast_mount)
+        data = get_now_playing_from_icecast(config.icecast_host, config.icecast_port, config.icecast_mount)
+        data["muted"] = music_muted
+        return data
 
     @app.get("/recent-announcements")
     def recent_announcements():
@@ -385,6 +388,28 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         if result is not None:
             return {"status": "skipped"}
         return JSONResponse(status_code=503, content={"status": "error", "message": "Liquidsoap unavailable"})
+
+    @app.post("/mute")
+    def mute_music():
+        nonlocal music_muted
+        result = query_liquidsoap(config.liquidsoap_socket, "var.set music_volume = 0.0")
+        if result is None:
+            return JSONResponse(status_code=503, content={"status": "error", "message": "Liquidsoap unavailable"})
+        music_muted = True
+        logger.info("Music muted")
+        _broadcast_sse(sse_clients, "mute", {"muted": True})
+        return {"status": "ok", "muted": True}
+
+    @app.post("/unmute")
+    def unmute_music():
+        nonlocal music_muted
+        result = query_liquidsoap(config.liquidsoap_socket, "var.set music_volume = 1.0")
+        if result is None:
+            return JSONResponse(status_code=503, content={"status": "error", "message": "Liquidsoap unavailable"})
+        music_muted = False
+        logger.info("Music unmuted")
+        _broadcast_sse(sse_clients, "mute", {"muted": False})
+        return {"status": "ok", "muted": False}
 
     @app.get("/events")
     async def events(request: Request):

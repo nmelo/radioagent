@@ -403,6 +403,64 @@ class TestApp:
         })
         assert resp.headers.get("access-control-allow-origin") == "*"
 
+    def test_mute_sets_volume_zero(self, client):
+        """POST /mute sends var.set music_volume = 0.0 to Liquidsoap."""
+        with patch("brain.query_liquidsoap", return_value="Variable music_volume set.") as mock_ql:
+            resp = client.post("/mute")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "muted": True}
+        mock_ql.assert_called_once()
+        assert "0.0" in mock_ql.call_args[0][1]
+
+    def test_unmute_restores_volume(self, client):
+        """POST /unmute sends var.set music_volume = 1.0 to Liquidsoap."""
+        with patch("brain.query_liquidsoap", return_value="Variable music_volume set.") as mock_ql:
+            resp = client.post("/unmute")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "muted": False}
+        mock_ql.assert_called_once()
+        assert "1.0" in mock_ql.call_args[0][1]
+
+    def test_mute_liquidsoap_unavailable(self, client):
+        """POST /mute returns 503 when Liquidsoap socket is down."""
+        with patch("brain.query_liquidsoap", return_value=None):
+            resp = client.post("/mute")
+        assert resp.status_code == 503
+
+    def test_unmute_liquidsoap_unavailable(self, client):
+        """POST /unmute returns 503 when Liquidsoap socket is down."""
+        with patch("brain.query_liquidsoap", return_value=None):
+            resp = client.post("/unmute")
+        assert resp.status_code == 503
+
+    def test_now_playing_includes_muted_state(self, client):
+        """GET /now-playing includes muted field, default false."""
+        with patch("brain.get_now_playing_from_icecast", return_value={
+            "title": "Test", "artist": "", "album": "", "source_type": "music",
+        }):
+            resp = client.get("/now-playing")
+        data = resp.json()
+        assert data["muted"] is False
+
+    def test_mute_toggle_reflected_in_now_playing(self, client):
+        """After POST /mute, GET /now-playing shows muted=true."""
+        with patch("brain.query_liquidsoap", return_value="ok"):
+            client.post("/mute")
+        with patch("brain.get_now_playing_from_icecast", return_value={
+            "title": "Test", "artist": "", "album": "", "source_type": "music",
+        }):
+            resp = client.get("/now-playing")
+        assert resp.json()["muted"] is True
+
+        # Unmute and verify
+        with patch("brain.query_liquidsoap", return_value="ok"):
+            client.post("/unmute")
+        with patch("brain.get_now_playing_from_icecast", return_value={
+            "title": "Test", "artist": "", "album": "", "source_type": "music",
+        }):
+            resp = client.get("/now-playing")
+        assert resp.json()["muted"] is False
+
 
 # --- Icecast metadata ---
 
