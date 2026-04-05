@@ -11,6 +11,7 @@ settings.server.socket.path := "/tmp/agent-radio.sock"
 
 # --- Music source ---
 music = playlist(
+  id="music",
   "/home/nmelo/Music",
   mode="random",
   reload_mode="watch",

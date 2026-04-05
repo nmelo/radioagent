@@ -11,6 +11,7 @@ settings.server.socket.path := "/tmp/agent-radio/liquidsoap.sock"
 
 # --- Music source ---
 music = playlist(
+  id="music",
   "/music",
   mode="random",
   reload_mode="watch",

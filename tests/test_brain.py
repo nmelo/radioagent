@@ -12,19 +12,12 @@ import pytest
 from brain import (
     AnnouncementRateLimiter,
     AnnounceRequest,
-    FAILURE_VOICE,
     QueuedAnnouncement,
     validate_wav,
     process_announcement,
     create_app,
     get_now_playing_from_icecast,
-    get_next_track,
-    get_tone_for_kind,
-    get_voice_for_kind,
-    is_tone_only,
-    push_tone_to_liquidsoap,
     query_liquidsoap,
-    _parse_liquidsoap_metadata,
 )
 
 
@@ -58,16 +51,10 @@ def _make_config(tmp_path):
     music = tmp_path / "music"
     music.mkdir()
     (music / "t.mp3").write_bytes(b"fake")
-    tones = tmp_path / "tones"
-    tones.mkdir()
-    # Create tone WAVs that the routing will look for
-    for name in ("rise", "resolve", "dissonant", "pulse", "hum", "descend", "bell", "chord_long"):
-        make_wav(tones / f"{name}.wav", duration=0.8)
     from config import RadioConfig
     return RadioConfig(
         music_dir=music,
         liquidsoap_socket=Path(tmp_path / "test.sock"),
-        tones_dir=tones,
         webhook_port=8001,
         icecast_password="test",
     )
@@ -213,7 +200,7 @@ class TestPipeline:
         config = _make_config(tmp_path)
 
         mock_tts = MagicMock()
-        def fake_render(text, output_path, voice=None):
+        def fake_render(text, output_path):
             make_wav(output_path, duration=2.0)
             return True
         mock_tts.render.side_effect = fake_render
@@ -238,7 +225,7 @@ class TestPipeline:
     def test_process_announcement_wav_invalid(self, tmp_path):
         config = _make_config(tmp_path)
         mock_tts = MagicMock()
-        def fake_render_short(text, output_path, voice=None):
+        def fake_render_short(text, output_path):
             make_wav(output_path, duration=0.1)  # too short
             return True
         mock_tts.render.side_effect = fake_render_short
@@ -251,7 +238,7 @@ class TestPipeline:
         config = _make_config(tmp_path)
         mock_tts = MagicMock()
         rendered_paths = []
-        def fake_render(text, output_path, voice=None):
+        def fake_render(text, output_path):
             rendered_paths.append(output_path)
             make_wav(output_path, duration=2.0)
             return True
@@ -278,13 +265,12 @@ class TestApp:
         config = _make_config(tmp_path)
         mock_tts = MagicMock()
         mock_tts.name = "mock"
-        def fake_render(text, output_path, voice=None):
+        def fake_render(text, output_path):
             make_wav(output_path, duration=2.0)
             return True
         mock_tts.render.side_effect = fake_render
 
         with patch("brain.push_to_liquidsoap", return_value=True), \
-             patch("brain.push_tone_to_liquidsoap", return_value=True), \
              patch("brain._schedule_wav_cleanup"):
             app = create_app(config, mock_tts)
             yield TestClient(app)
@@ -317,8 +303,8 @@ class TestApp:
         assert resp_drop.status_code == 429
 
     def test_suppressed_event(self, client):
-        """Events matching suppress_kinds with no tone mapping return suppressed."""
-        resp = client.post("/announce", json={"detail": "chat msg", "kind": "agent.message"})
+        """Events matching suppress_kinds should return suppressed status."""
+        resp = client.post("/announce", json={"detail": "idle event", "kind": "agent.idle"})
         assert resp.status_code == 200
         assert resp.json()["status"] == "suppressed"
 
@@ -403,8 +389,8 @@ class TestApp:
             html_path.unlink(missing_ok=True)
 
     def test_suppressed_not_in_history(self, client):
-        """Fully suppressed events (no tone, no voice) should not appear in history."""
-        client.post("/announce", json={"detail": "chat msg", "kind": "agent.message"})
+        """Suppressed events should not appear in announcement history."""
+        client.post("/announce", json={"detail": "idle", "kind": "agent.idle"})
         resp = client.get("/recent-announcements")
         assert resp.json() == []
 
@@ -416,277 +402,45 @@ class TestApp:
         assert resp.headers.get("access-control-allow-origin") == "*"
 
 
-# --- Icecast metadata ---
+# --- Liquidsoap metadata ---
 
 
-def _mock_icecast_response(icecast_json):
-    """Create a mock urllib response for Icecast status JSON."""
-    import json as _json
-    mock_resp = MagicMock()
-    mock_resp.read.return_value = _json.dumps(icecast_json).encode()
-    mock_resp.__enter__ = lambda s: s
-    mock_resp.__exit__ = MagicMock(return_value=False)
-    return mock_resp
+class TestNowPlaying:
+    def test_get_now_playing_parses_metadata(self):
+        metadata_response = (
+            'title="Test Track"\n'
+            'artist="Test Artist"\n'
+            'album="Test Album"\n'
+            'source="music"\n'
+            'filename="/opt/agent-radio/music/test.mp3"\n'
+        )
+        with patch("brain.query_liquidsoap") as mock_query:
+            mock_query.side_effect = lambda sp, cmd: {
+                "request.on_air": "5",
+                "request.metadata 5": metadata_response,
+            }.get(cmd)
+            result = get_now_playing(Path("/tmp/test.sock"))
 
+        assert result["title"] == "Test Track"
+        assert result["artist"] == "Test Artist"
+        assert result["album"] == "Test Album"
+        assert result["source_type"] == "music"
 
-class TestNowPlayingFromIcecast:
-    def test_parses_artist_title(self):
-        """Icecast title 'Artist - Title' is split correctly."""
-        icecast_json = {
-            "icestats": {
-                "source": {
-                    "title": "Ruben Gonzalez - Chanchullo",
-                    "listenurl": "http://localhost:8000/stream",
-                }
-            }
-        }
-        with patch("urllib.request.urlopen", return_value=_mock_icecast_response(icecast_json)):
-            result = get_now_playing_from_icecast("localhost", 8000, "/stream")
+    def test_get_now_playing_fallback_filename(self):
+        metadata_response = (
+            'filename="/opt/agent-radio/music/ambient_01.mp3"\n'
+            'source="music"\n'
+        )
+        with patch("brain.query_liquidsoap") as mock_query:
+            mock_query.side_effect = lambda sp, cmd: {
+                "request.on_air": "1",
+                "request.metadata 1": metadata_response,
+            }.get(cmd)
+            result = get_now_playing(Path("/tmp/test.sock"))
 
-        assert result["title"] == "Chanchullo"
-        assert result["artist"] == "Ruben Gonzalez"
+        assert result["title"] == "ambient_01"
 
-    def test_title_only_no_dash(self):
-        """Title without ' - ' separator goes entirely to title field."""
-        icecast_json = {
-            "icestats": {
-                "source": {
-                    "title": "ambient_drone_003",
-                    "listenurl": "http://localhost:8000/stream",
-                }
-            }
-        }
-        with patch("urllib.request.urlopen", return_value=_mock_icecast_response(icecast_json)):
-            result = get_now_playing_from_icecast("localhost", 8000, "/stream")
-
-        assert result["title"] == "ambient_drone_003"
-        assert result["artist"] == ""
-
-    def test_icecast_unreachable(self):
-        """When Icecast is down, return fallback."""
-        with patch("urllib.request.urlopen", side_effect=Exception("conn refused")):
-            result = get_now_playing_from_icecast("localhost", 8000, "/stream")
-
+    def test_get_now_playing_socket_down(self):
+        with patch("brain.query_liquidsoap", return_value=None):
+            result = get_now_playing(Path("/tmp/test.sock"))
         assert result["title"] == "Connecting..."
-
-    def test_empty_title(self):
-        """When Icecast has no title metadata, return fallback."""
-        icecast_json = {"icestats": {"source": {"title": ""}}}
-        with patch("urllib.request.urlopen", return_value=_mock_icecast_response(icecast_json)):
-            result = get_now_playing_from_icecast("localhost", 8000, "/stream")
-
-        assert result["title"] == "Connecting..."
-
-    def test_multiple_sources_selects_mount(self):
-        """When Icecast has multiple sources, select by mount path."""
-        icecast_json = {
-            "icestats": {
-                "source": [
-                    {"title": "Wrong - Track", "listenurl": "http://localhost:8000/other"},
-                    {"title": "Right - Track", "listenurl": "http://localhost:8000/stream"},
-                ]
-            }
-        }
-        with patch("urllib.request.urlopen", return_value=_mock_icecast_response(icecast_json)):
-            result = get_now_playing_from_icecast("localhost", 8000, "/stream")
-
-        assert result["title"] == "Track"
-        assert result["artist"] == "Right"
-
-
-# --- Tone routing ---
-
-
-class TestToneRouting:
-    def test_get_tone_for_started(self):
-        assert get_tone_for_kind("agent.started") == "rise"
-
-    def test_get_tone_for_completed(self):
-        assert get_tone_for_kind("agent.completed") == "resolve"
-
-    def test_get_tone_for_failed(self):
-        assert get_tone_for_kind("bot.failed") == "dissonant"
-
-    def test_get_tone_for_stuck(self):
-        assert get_tone_for_kind("agent.stuck") == "pulse"
-
-    def test_get_tone_for_idle(self):
-        assert get_tone_for_kind("agent.idle") == "hum"
-
-    def test_get_tone_for_stopped(self):
-        assert get_tone_for_kind("agent.stopped") == "descend"
-
-    def test_get_tone_for_deploy(self):
-        assert get_tone_for_kind("deploy.production") == "bell"
-
-    def test_get_tone_for_milestone(self):
-        assert get_tone_for_kind("milestone.phase1") == "chord_long"
-
-    def test_no_tone_for_custom(self):
-        assert get_tone_for_kind("custom") is None
-
-    def test_no_tone_for_message(self):
-        assert get_tone_for_kind("agent.message") is None
-
-    def test_is_tone_only_started(self):
-        assert is_tone_only("agent.started") is True
-
-    def test_is_tone_only_stopped(self):
-        assert is_tone_only("agent.stopped") is True
-
-    def test_is_tone_only_idle(self):
-        assert is_tone_only("agent.idle") is True
-
-    def test_is_not_tone_only_completed(self):
-        assert is_tone_only("agent.completed") is False
-
-    def test_is_not_tone_only_deploy(self):
-        assert is_tone_only("deploy.staging") is False
-
-
-class TestToneApp:
-    @pytest.fixture
-    def client(self, tmp_path):
-        from fastapi.testclient import TestClient
-        config = _make_config(tmp_path)
-        mock_tts = MagicMock()
-        mock_tts.name = "mock"
-        def fake_render(text, output_path, voice=None):
-            make_wav(output_path, duration=2.0)
-            return True
-        mock_tts.render.side_effect = fake_render
-
-        with patch("brain.push_to_liquidsoap", return_value=True), \
-             patch("brain.push_tone_to_liquidsoap", return_value=True), \
-             patch("brain._schedule_wav_cleanup"):
-            app = create_app(config, mock_tts)
-            yield TestClient(app)
-
-    def test_started_plays_tone_no_voice(self, client):
-        """agent.started should return tone_only with rise tone."""
-        resp = client.post("/announce", json={
-            "detail": "starting work", "kind": "agent.started", "agent": "eng1",
-        })
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "tone_only"
-        assert data["tone"] == "rise"
-
-    def test_completed_plays_both(self, client):
-        """agent.completed should play voice (immediate) and tone."""
-        resp = client.post("/announce", json={
-            "detail": "finished the task", "kind": "agent.completed", "agent": "eng1",
-        })
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "immediate"
-
-    def test_tone_only_still_in_history(self, client):
-        """Tone-only events should still appear in announcement history."""
-        client.post("/announce", json={
-            "detail": "starting work", "kind": "agent.started", "agent": "eng1",
-        })
-        resp = client.get("/recent-announcements")
-        data = resp.json()
-        assert len(data) == 1
-        assert data[0]["tone"] == "rise"
-
-    def test_mute_tones(self, client):
-        resp = client.post("/mute-tones")
-        assert resp.status_code == 200
-        assert resp.json() == {"status": "ok", "muted": True}
-
-    def test_unmute_tones(self, client):
-        client.post("/mute-tones")
-        resp = client.post("/unmute-tones")
-        assert resp.status_code == 200
-        assert resp.json() == {"status": "ok", "muted": False}
-
-    def test_tones_muted_in_now_playing(self, client):
-        with patch("brain.get_now_playing_from_icecast", return_value={
-            "title": "Test", "artist": "", "album": "", "source_type": "music",
-        }), patch("brain.get_next_track", return_value=None):
-            resp = client.get("/now-playing")
-        assert resp.json()["tones_muted"] is False
-
-        client.post("/mute-tones")
-        with patch("brain.get_now_playing_from_icecast", return_value={
-            "title": "Test", "artist": "", "album": "", "source_type": "music",
-        }), patch("brain.get_next_track", return_value=None):
-            resp = client.get("/now-playing")
-        assert resp.json()["tones_muted"] is True
-
-    def test_custom_event_no_tone(self, client):
-        """Custom events should not play a tone."""
-        resp = client.post("/announce", json={
-            "detail": "manual message", "kind": "custom", "agent": "eng1",
-        })
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "immediate"
-
-    def test_deploy_plays_both(self, client):
-        """deploy.* events should play both tone and voice."""
-        resp = client.post("/announce", json={
-            "detail": "deployed to prod", "kind": "deploy.production", "agent": "shipper",
-        })
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "immediate"
-
-
-# --- Voice selection ---
-
-
-class TestVoiceSelection:
-    def test_failed_uses_failure_voice(self):
-        assert get_voice_for_kind("agent.failed", "af_heart") == FAILURE_VOICE
-
-    def test_stuck_uses_failure_voice(self):
-        assert get_voice_for_kind("agent.stuck", "af_heart") == FAILURE_VOICE
-
-    def test_completed_uses_default(self):
-        assert get_voice_for_kind("agent.completed", "af_heart") == "af_heart"
-
-    def test_custom_uses_default(self):
-        assert get_voice_for_kind("custom", "af_heart") == "af_heart"
-
-    def test_deploy_uses_default(self):
-        assert get_voice_for_kind("deploy.production", "af_heart") == "af_heart"
-
-
-class TestVoiceInPipeline:
-    @pytest.fixture
-    def client(self, tmp_path):
-        from fastapi.testclient import TestClient
-        config = _make_config(tmp_path)
-        config.tts_voice = "af_heart"
-        mock_tts = MagicMock()
-        mock_tts.name = "mock"
-        def fake_render(text, output_path, voice=None):
-            make_wav(output_path, duration=2.0)
-            return True
-        mock_tts.render.side_effect = fake_render
-
-        with patch("brain.push_to_liquidsoap", return_value=True), \
-             patch("brain.push_tone_to_liquidsoap", return_value=True), \
-             patch("brain._schedule_wav_cleanup"):
-            app = create_app(config, mock_tts)
-            yield TestClient(app), mock_tts
-
-    def test_failed_announcement_uses_male_voice(self, client):
-        """agent.failed should render with am_michael voice."""
-        tc, mock_tts = client
-        tc.post("/announce", json={
-            "detail": "build failed", "kind": "agent.failed", "agent": "eng1",
-        })
-        mock_tts.render.assert_called_once()
-        _, kwargs = mock_tts.render.call_args
-        assert kwargs.get("voice") == FAILURE_VOICE
-
-    def test_completed_announcement_uses_default_voice(self, client):
-        """agent.completed should render with default voice (af_heart)."""
-        tc, mock_tts = client
-        tc.post("/announce", json={
-            "detail": "task done", "kind": "agent.completed", "agent": "eng1",
-        })
-        mock_tts.render.assert_called_once()
-        _, kwargs = mock_tts.render.call_args
-        assert kwargs.get("voice") == "af_heart"
