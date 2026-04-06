@@ -6,7 +6,7 @@ RUN apt-get update \
     && mkdir -p /var/log/icecast2 \
     && chown icecast2:icecast /var/log/icecast2
 
-COPY config/icecast.xml /etc/icecast2/icecast.xml
+COPY config/icecast.xml.example /etc/icecast2/icecast.xml
 
 EXPOSE 8000
 

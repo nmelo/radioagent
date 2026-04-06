@@ -15,13 +15,13 @@
 
     <authentication>
         <!-- Liquidsoap connects as source with this password -->
-        <source-password>agent-radio-src</source-password>
-        <relay-password>agent-radio-relay</relay-password>
+        <source-password>CHANGE_ME_source</source-password>
+        <relay-password>CHANGE_ME_relay</relay-password>
         <admin-user>admin</admin-user>
-        <admin-password>agent-radio-admin</admin-password>
+        <admin-password>CHANGE_ME_admin</admin-password>
     </authentication>
 
-    <hostname>192.168.1.100</hostname>
+    <hostname>0.0.0.0</hostname>
 
     <listen-socket>
         <port>8000</port>
