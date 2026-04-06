@@ -48,6 +48,7 @@ services:
       ICECAST_SOURCE_PASSWORD: CHANGE_ME_source
       RADIO_MUSIC_DIR: /music
       LIQUIDSOAP_SOCKET_PATH: /tmp/agent-radio/liquidsoap.sock
+      LIQUIDSOAP_LOG_TO_FILE: "false"
     depends_on:
       icecast:
         condition: service_healthy
@@ -77,3 +78,8 @@ services:
 
 volumes:
   shared:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=100m,mode=1777"

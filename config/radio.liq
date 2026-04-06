@@ -2,7 +2,8 @@
 # Robust music playback with logging and blank detection
 
 # --- Logging ---
-settings.log.file := true
+# In Docker, set LIQUIDSOAP_LOG_TO_FILE=false so logs go to stdout (docker compose logs)
+settings.log.file := (environment.get(default="true", "LIQUIDSOAP_LOG_TO_FILE") == "true")
 settings.log.file.path := "/tmp/agent-radio/liquidsoap.log"
 settings.log.level := 3
 
