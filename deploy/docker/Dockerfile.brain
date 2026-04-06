@@ -9,14 +9,14 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY brain.py config.py script_generator.py config.yaml ./
-COPY tts/ tts/
-COPY dashboard.html ./
+COPY src/ src/
 COPY skills/ skills/
 COPY website/ website/
+
+ENV PYTHONPATH=/app/src
 
 RUN mkdir -p /tmp/agent-radio
 
 EXPOSE 8001
 
-CMD ["python", "brain.py"]
+CMD ["python", "-m", "brain"]

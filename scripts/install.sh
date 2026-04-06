@@ -290,6 +290,7 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=$INSTALL_DIR/src
 
 [Install]
 WantedBy=multi-user.target
@@ -321,7 +322,7 @@ echo ""
 echo -e "${BOLD}Start manually:${NC}"
 echo "  sudo systemctl start icecast2"
 echo "  liquidsoap $INSTALL_DIR/config/radio.liq &"
-echo "  $VENV_DIR/bin/python -m brain &"
+echo "  PYTHONPATH=$INSTALL_DIR/src $VENV_DIR/bin/python -m brain &"
 echo ""
 if [[ ! "${INSTALL_SYSTEMD:-y}" =~ ^[Nn]$ ]]; then
 echo -e "${BOLD}Start with systemd:${NC}"

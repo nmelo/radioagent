@@ -32,6 +32,9 @@ from tts.kokoro_engine import KokoroEngine
 
 from fnmatch import fnmatch
 
+# src/brain.py -> repo root is two levels up
+PROJECT_ROOT = Path(__file__).parent.parent
+
 logger = logging.getLogger(__name__)
 
 WAV_DIR = Path("/tmp/agent-radio")
@@ -500,21 +503,21 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
 
     @app.get("/favicon.ico")
     def favicon():
-        ico_path = Path(__file__).parent / "website" / "favicon.ico"
+        ico_path = PROJECT_ROOT / "website" / "favicon.ico"
         if ico_path.exists():
             return FileResponse(ico_path, media_type="image/x-icon")
         return JSONResponse(status_code=404, content={"error": "favicon.ico not found"})
 
     @app.get("/assets/apple-touch-icon.png")
     def apple_touch_icon():
-        icon_path = Path(__file__).parent / "website" / "assets" / "apple-touch-icon.png"
+        icon_path = PROJECT_ROOT / "website" / "assets" / "apple-touch-icon.png"
         if icon_path.exists():
             return FileResponse(icon_path, media_type="image/png")
         return JSONResponse(status_code=404, content={"error": "apple-touch-icon.png not found"})
 
     @app.get("/skill/dj.skill")
     def download_dj_skill():
-        skill_path = Path(__file__).parent / "skills" / "dj.skill"
+        skill_path = PROJECT_ROOT / "skills" / "dj.skill"
         if skill_path.exists():
             return FileResponse(skill_path, filename="dj.skill", media_type="application/octet-stream")
         return JSONResponse(status_code=404, content={"error": "dj.skill not found"})
@@ -711,7 +714,7 @@ def main():
         datefmt="%H:%M:%S",
     )
 
-    config = load_config(Path(__file__).parent / "config.yaml")
+    config = load_config(PROJECT_ROOT / "config.yaml")
     tts = KokoroEngine(voice=config.tts_voice, speed=config.tts_speed,
                        extra_voices=[FAILURE_VOICE])
     app = create_app(config, tts)

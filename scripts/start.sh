@@ -163,7 +163,7 @@ case "$brain_status" in
     free)
         echo "Starting brain on port $WEBHOOK_PORT..."
         cd "$RADIO_DIR"
-        "$RADIO_DIR/venv/bin/python" -m brain &
+        PYTHONPATH="$RADIO_DIR/src" "$RADIO_DIR/venv/bin/python" -m brain &
         echo $! > "$BRAIN_PID"
 
         brain_wait=0
