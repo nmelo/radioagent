@@ -10,9 +10,10 @@ settings.server.socket := true
 settings.server.socket.path := "/tmp/agent-radio.sock"
 
 # --- Music source ---
+music_dir = environment.get(default="/opt/radioagent/music", "RADIO_MUSIC_DIR")
 music = playlist(
   id="music",
-  "/home/nmelo/Music",
+  music_dir,
   mode="random",
   reload_mode="watch",
   prefetch=2
