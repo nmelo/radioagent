@@ -63,6 +63,17 @@ fi
 # Determine install method
 METHOD=""
 if [ "$HAS_COMPOSE" = true ]; then
+    # The CLI binary and compose plugin exist even when the daemon is stopped.
+    # Verify the daemon is actually responsive before committing to docker method.
+    DAEMON_UP=false
+    if command -v timeout &>/dev/null; then
+        timeout 5 docker info &>/dev/null 2>&1 && DAEMON_UP=true || true
+    else
+        docker info &>/dev/null 2>&1 && DAEMON_UP=true || true
+    fi
+    if [ "$DAEMON_UP" = false ]; then
+        fail "Docker is installed but the daemon is not running. Start Docker Desktop and re-run this installer."
+    fi
     METHOD="docker"
 elif [ "$(uname -s)" = "Linux" ]; then
     METHOD="bare-metal"
