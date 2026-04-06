@@ -87,7 +87,7 @@ git clone https://github.com/nmelo/agent-radio.git
 cd agent-radio
 cp config.yaml.example config.yaml
 # Edit config.yaml: set music_dir (will be mounted into container)
-docker compose up -d
+docker compose -f deploy/docker/docker-compose.yml up -d
 ```
 
 Docker Compose handles Icecast, Liquidsoap, and brain. The operator's music directory is bind-mounted into the Liquidsoap container. Dashboard accessible at http://localhost:8001/.
@@ -169,10 +169,10 @@ profiles:
 **GPU vs CPU:**
 ```bash
 # With NVIDIA GPU
-docker compose --profile gpu up -d
+docker compose -f deploy/docker/docker-compose.yml --profile gpu up -d
 
 # CPU only (macOS, Linux without GPU)
-docker compose up -d
+docker compose -f deploy/docker/docker-compose.yml up -d
 ```
 
 ## Docker Details
@@ -357,7 +357,7 @@ For macOS users who want Agent Radio to start on login:
     <string>/usr/local/bin/docker</string>
     <string>compose</string>
     <string>-f</string>
-    <string>/Users/YOURUSERNAME/agent-radio/docker-compose.yml</string>
+    <string>/Users/YOURUSERNAME/agent-radio/deploy/docker/docker-compose.yml</string>
     <string>up</string>
     <string>-d</string>
   </array>
@@ -448,7 +448,7 @@ After install, the operator drops their own ambient files into the music directo
 git clone https://github.com/nmelo/agent-radio.git
 cd agent-radio
 cp config.yaml.example config.yaml
-docker compose up -d
+docker compose -f deploy/docker/docker-compose.yml up -d
 
 # Open dashboard
 open http://localhost:8001

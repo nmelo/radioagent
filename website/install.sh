@@ -120,24 +120,24 @@ fi
 install_docker() {
     info "Building containers..."
 
-    # Write .env with default profile and music path
-    cat > "$INSTALL_DIR/.env" <<EOF
+    # Write .env with default profile and music path (placed alongside compose file)
+    cat > "$INSTALL_DIR/deploy/docker/.env" <<EOF
 COMPOSE_PROFILES=cpu
 MUSIC_DIR=$MUSIC_DIR
 EOF
 
-    docker compose build --quiet 2>&1 | tail -1
+    docker compose -f deploy/docker/docker-compose.yml build --quiet 2>&1 | tail -1
     ok "Containers built"
 
     info "Starting services..."
-    docker compose up -d 2>&1 | tail -3
+    docker compose -f deploy/docker/docker-compose.yml up -d 2>&1 | tail -3
     ok "Services running"
 
     # Wait for icecast health
     info "Waiting for Icecast..."
     local tries=0
     while [ $tries -lt 15 ]; do
-        if docker compose ps --format json 2>/dev/null | grep -q '"healthy"'; then
+        if docker compose -f deploy/docker/docker-compose.yml ps --format json 2>/dev/null | grep -q '"healthy"'; then
             break
         fi
         sleep 1
@@ -204,9 +204,9 @@ echo -e "      -d '{\"detail\": \"Radio Agent is live\"}'"
 echo ""
 echo -e "  ${BOLD}Manage:${RESET}"
 echo -e "    cd ${INSTALL_DIR}"
-echo -e "    docker compose logs -f     ${DIM}# view logs${RESET}"
-echo -e "    docker compose restart     ${DIM}# restart${RESET}"
-echo -e "    docker compose down        ${DIM}# stop${RESET}"
+echo -e "    docker compose -f deploy/docker/docker-compose.yml logs -f     ${DIM}# view logs${RESET}"
+echo -e "    docker compose -f deploy/docker/docker-compose.yml restart     ${DIM}# restart${RESET}"
+echo -e "    docker compose -f deploy/docker/docker-compose.yml down        ${DIM}# stop${RESET}"
 echo ""
 echo -e "  ${DIM}Docs: https://radioagent.live${RESET}"
 echo ""

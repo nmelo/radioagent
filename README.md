@@ -15,7 +15,7 @@ A LAN radio station that gives you ambient audio awareness of your AI coding age
 ```bash
 git clone https://github.com/nmelo/radioagent.git
 cd radioagent
-docker compose up
+docker compose -f deploy/docker/docker-compose.yml up
 ```
 
 ### Linux bare-metal

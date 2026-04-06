@@ -12,9 +12,8 @@ docs/
 tests/
 __pycache__
 *.pyc
-docker/
-docker-compose.yml
-Dockerfile.*
+deploy/k8s/
+deploy/systemd/
 .dockerignore
 music/
 tones/
