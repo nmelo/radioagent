@@ -5,7 +5,8 @@ Requires=agent-radio-liquidsoap.service
 
 [Service]
 Type=simple
-User=nmelo
+# TODO: Change 'radioagent' to the user that will run Agent Radio on your system
+User=radioagent
 WorkingDirectory=/opt/agent-radio
 ExecStart=/opt/agent-radio/venv/bin/python -m brain
 Restart=on-failure

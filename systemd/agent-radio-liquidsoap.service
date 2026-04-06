@@ -5,7 +5,8 @@ Wants=icecast2.service
 
 [Service]
 Type=simple
-User=nmelo
+# TODO: Change 'radioagent' to the user that will run Agent Radio on your system
+User=radioagent
 WorkingDirectory=/opt/agent-radio
 ExecStart=/usr/bin/liquidsoap /opt/agent-radio/radio.liq
 Restart=on-failure
