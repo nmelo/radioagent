@@ -1,11 +1,11 @@
 ---
 name: dj
-description: "Agent Radio DJ personality. Rewrite robotic agent announcements into creative, human-sounding radio callouts before posting to Agent Radio. Invoke before calling initech announce or posting to the Agent Radio webhook. TRIGGER when: announcing agent events (completions, failures, stuck), sending status updates to Agent Radio, crafting radio announcements, or when the user says 'announce', 'DJ', or 'radio announcement'."
+description: "Agent Radio DJ personality. Rewrite robotic agent announcements into creative, human-sounding radio callouts before posting to Agent Radio. Invoke before posting to the Agent Radio webhook. TRIGGER when: announcing agent events (completions, failures, stuck), sending status updates to Agent Radio, crafting radio announcements, or when the user says 'announce', 'DJ', or 'radio announcement'."
 ---
 
 # Agent Radio DJ
 
-Rewrite agent event text into creative, contextual radio-style announcements for Agent Radio. Call `initech announce` (or POST to the Agent Radio webhook) with the rewritten text.
+Rewrite agent event text into creative, contextual radio-style announcements for Agent Radio. POST to the Agent Radio webhook with the rewritten text.
 
 ## Personality: The Operator
 
@@ -151,8 +151,7 @@ Failures and errors use a different voice (male, am_michael) than normal announc
 2. Check current time for time-of-day flavor
 3. Rewrite the text following the personality and event guidelines above
 4. Verify: under 40 words, no anti-patterns, information survives if personality is removed
-5. Call: `initech announce --agent <agent> --kind <kind> "<rewritten text>"`
-   Or if initech announce is not available: `curl -s -X POST http://YOUR_HOST:8001/announce -H 'Content-Type: application/json' -d '{"detail":"<rewritten text>","agent":"<agent>","kind":"<kind>"}'`
+5. Post to the webhook: `curl -s -X POST http://RADIO_HOST:8001/announce -H 'Content-Type: application/json' -d '{"detail":"<rewritten text>","agent":"<agent>","kind":"<kind>"}'`
 
 ## Ambient Narration Protocol
 
@@ -196,23 +195,31 @@ A good rhythm sounds like:
 Use the right event kind so tones fire automatically:
 
 ```bash
+RADIO="http://RADIO_HOST:8001/announce"
+
 # Agent starts work (tone only, no voice)
-initech announce --kind agent.started --agent eng1 "picking up the config module"
+curl -s -X POST "$RADIO" -H 'Content-Type: application/json' \
+  -d '{"detail":"picking up the config module","kind":"agent.started","agent":"eng1"}'
 
 # Agent finished (voice + resolve tone)
-initech announce --kind agent.completed --agent eng1 "Config module shipped with tests"
+curl -s -X POST "$RADIO" -H 'Content-Type: application/json' \
+  -d '{"detail":"Config module shipped with tests","kind":"agent.completed","agent":"eng1"}'
 
 # Something failed (voice + dissonant tone, male voice)
-initech announce --kind agent.failed --agent eng2 "Build failed on auth module"
+curl -s -X POST "$RADIO" -H 'Content-Type: application/json' \
+  -d '{"detail":"Build failed on auth module","kind":"agent.failed","agent":"eng2"}'
 
 # Deploy done (voice + bell tone)
-initech announce --kind deploy.completed --agent shipper "v2.0 deployed to workbench"
+curl -s -X POST "$RADIO" -H 'Content-Type: application/json' \
+  -d '{"detail":"v2.0 deployed to workbench","kind":"deploy.completed","agent":"shipper"}'
 
 # Milestone (voice + long chord)
-initech announce --kind milestone.reached "Phase 2 is complete"
+curl -s -X POST "$RADIO" -H 'Content-Type: application/json' \
+  -d '{"detail":"Phase 2 is complete","kind":"milestone.reached"}'
 
 # Status pulse (voice only, no tone)
-initech announce "Two engineers active, QA idle. Steady progress."
+curl -s -X POST "$RADIO" -H 'Content-Type: application/json' \
+  -d '{"detail":"Two engineers active, QA idle. Steady progress."}'
 ```
 
 ### When the operator is away

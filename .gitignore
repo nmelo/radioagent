@@ -9,7 +9,7 @@ venv/
 # Environment
 .env
 
-# Initech (contains secrets: Slack tokens, webhook URLs)
+# Agent orchestration config (may contain secrets)
 initech.yaml
 .initech/
 
