@@ -22,7 +22,7 @@ icecast_mount: /stream
 icecast_password: changeme
 
 # Tones
-tones_dir: /opt/agent-radio/tones
+tones_dir: /opt/agent-radio/audio/tones
 
 # Announcements
 suppress_kinds:

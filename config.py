@@ -42,7 +42,7 @@ class RadioConfig:
     icecast_password: str = "changeme"
 
     # Tones
-    tones_dir: Path = field(default_factory=lambda: Path("/opt/agent-radio/tones"))
+    tones_dir: Path = field(default_factory=lambda: Path("/opt/agent-radio/audio/tones"))
 
     # Announcements
     suppress_kinds: list[str] = field(default_factory=lambda: ["*.idle", "*.message"])

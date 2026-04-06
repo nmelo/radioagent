@@ -13,7 +13,7 @@ x-brain: &brain-base
     - shared:/tmp/agent-radio
     # Copy docker/config.yaml.example to docker/config.yaml and set your passwords
     - ./docker/config.yaml:/app/config.yaml:ro
-    - ${TONES_DIR:-./tones}:/tones:ro
+    - ${TONES_DIR:-./audio/tones}:/tones:ro
   depends_on:
     icecast:
       condition: service_healthy

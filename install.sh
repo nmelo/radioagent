@@ -143,11 +143,11 @@ if [ "${SKIP_CONFIG:-false}" != "true" ]; then
     fi
 
     # Copy starter music if the music dir is empty
-    if [ -d "$INSTALL_DIR/starter-music" ] && [ -d "$MUSIC_DIR_PATH" ]; then
+    if [ -d "$INSTALL_DIR/audio/starter-music" ] && [ -d "$MUSIC_DIR_PATH" ]; then
         MUSIC_COUNT=$(find "$MUSIC_DIR_PATH" -maxdepth 1 -name "*.mp3" -o -name "*.ogg" -o -name "*.flac" -o -name "*.wav" 2>/dev/null | wc -l)
         if [ "$MUSIC_COUNT" -eq 0 ]; then
             info "Copying starter music to $MUSIC_DIR_PATH..."
-            cp "$INSTALL_DIR"/starter-music/*.mp3 "$MUSIC_DIR_PATH/" 2>/dev/null || true
+            cp "$INSTALL_DIR"/audio/starter-music/*.mp3 "$MUSIC_DIR_PATH/" 2>/dev/null || true
             chown "$REAL_USER:$REAL_USER" "$MUSIC_DIR_PATH"/*.mp3 2>/dev/null || true
             ok "Starter tracks copied (CC0 public domain)"
         fi
@@ -167,7 +167,7 @@ if [ "${SKIP_CONFIG:-false}" != "true" ]; then
 
     sed -e "s|music_dir:.*|music_dir: $MUSIC_DIR_PATH|" \
         -e "s|icecast_password:.*|icecast_password: $ICECAST_PW|" \
-        -e "s|tones_dir:.*|tones_dir: $INSTALL_DIR/tones|" \
+        -e "s|tones_dir:.*|tones_dir: $INSTALL_DIR/audio/tones|" \
         "$INSTALL_DIR/config.yaml.example" > "$INSTALL_DIR/config.yaml"
 
     # Disable AI music if no GPU
