@@ -272,6 +272,120 @@ section {
   color: #4ADE80;
 }
 
+/* --- Demo player --- */
+.demo-player {
+  margin-top: 32px;
+  position: relative;
+  z-index: 3;
+  animation: fade-up 1s ease-out 0.25s both;
+}
+
+.demo-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--amber-dim);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.demo-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-panel);
+  border: 1px solid rgba(232, 163, 23, 0.12);
+  border-radius: 8px;
+  padding: 10px 16px;
+  max-width: 360px;
+}
+
+.demo-play-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid var(--amber);
+  background: transparent;
+  color: var(--amber);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.demo-play-btn:hover { background: var(--amber-glow); }
+.demo-play-btn svg { width: 14px; height: 14px; fill: var(--amber); }
+
+.demo-time {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  min-width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.demo-volume {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 60px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(232, 163, 23, 0.2);
+  outline: none;
+  flex-shrink: 0;
+}
+
+.demo-volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--amber);
+  cursor: pointer;
+}
+
+.demo-volume::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--amber);
+  cursor: pointer;
+  border: none;
+}
+
+.demo-progress {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(232, 163, 23, 0.15);
+  outline: none;
+  cursor: pointer;
+}
+
+.demo-progress::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--amber);
+  cursor: pointer;
+}
+
+.demo-progress::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--amber);
+  cursor: pointer;
+  border: none;
+}
+
 .hero-screenshot {
   margin-top: 48px;
   position: relative;
@@ -600,6 +714,17 @@ footer a:hover {
 <section class="hero">
   <h1 class="hero-headline">Hear your build.<br><em>Don't watch it.</em></h1>
   <p class="hero-sub">A radio station for AI coding sessions. Ambient music plays continuously. When your agents finish work, hit failures, or pick up new tasks, a voice announces it over the stream. Peripheral awareness without a screen.</p>
+  <div class="demo-player">
+    <div class="demo-label">Listen to a demo session</div>
+    <div class="demo-bar">
+      <button class="demo-play-btn" id="demoPlayBtn" aria-label="Play demo">
+        <svg viewBox="0 0 24 24" id="demoIcon"><polygon points="6,3 20,12 6,21"/></svg>
+      </button>
+      <input type="range" class="demo-progress" id="demoProgress" min="0" max="100" value="0" aria-label="Seek">
+      <span class="demo-time" id="demoTime">0:31</span>
+      <input type="range" class="demo-volume" id="demoVolume" min="0" max="100" value="70" aria-label="Volume">
+    </div>
+  </div>
   <div class="hero-cta">
     <code>curl -sSL https://radioagent.live/install.sh | bash<button class="code-copy" id="curlCopyBtn" onclick="copyCurl()" aria-label="Copy command"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></code>
   </div>
@@ -826,6 +951,71 @@ function copyCurl() {
     setTimeout(function() { btn.classList.remove('copied'); }, 2000);
   });
 }
+
+// --- Demo player ---
+(function() {
+  var audio = new Audio('assets/demo.mp3');
+  var playBtn = document.getElementById('demoPlayBtn');
+  var icon = document.getElementById('demoIcon');
+  var progress = document.getElementById('demoProgress');
+  var timeEl = document.getElementById('demoTime');
+  var volume = document.getElementById('demoVolume');
+  var playing = false;
+  // Static SVG constants only, no user content
+  var PLAY_PATH = '<polygon points="6,3 20,12 6,21"/>';
+  var PAUSE_PATH = '<rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/>';
+
+  audio.volume = volume.value / 100;
+  audio.preload = 'metadata';
+
+  function fmt(s) {
+    var m = Math.floor(s / 60);
+    var sec = Math.floor(s % 60);
+    return m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+
+  playBtn.addEventListener('click', function() {
+    if (playing) { audio.pause(); } else { audio.play(); }
+  });
+
+  audio.addEventListener('play', function() {
+    playing = true;
+    // Safe: static SVG constant, no user content
+    icon.innerHTML = PAUSE_PATH;
+  });
+
+  audio.addEventListener('pause', function() {
+    playing = false;
+    // Safe: static SVG constant, no user content
+    icon.innerHTML = PLAY_PATH;
+  });
+
+  audio.addEventListener('ended', function() {
+    playing = false;
+    // Safe: static SVG constant, no user content
+    icon.innerHTML = PLAY_PATH;
+    progress.value = 0;
+    timeEl.textContent = fmt(audio.duration || 31);
+  });
+
+  audio.addEventListener('timeupdate', function() {
+    if (audio.duration) {
+      progress.value = (audio.currentTime / audio.duration) * 100;
+      var rem = audio.duration - audio.currentTime;
+      timeEl.textContent = fmt(rem);
+    }
+  });
+
+  progress.addEventListener('input', function() {
+    if (audio.duration) {
+      audio.currentTime = (this.value / 100) * audio.duration;
+    }
+  });
+
+  volume.addEventListener('input', function() {
+    audio.volume = this.value / 100;
+  });
+})();
 </script>
 </body>
 </html><!-- auto-deploy test -->
