@@ -13,6 +13,7 @@ COPY brain.py config.py script_generator.py config.yaml ./
 COPY tts/ tts/
 COPY dashboard.html ./
 COPY skills/ skills/
+COPY website/ website/
 
 RUN mkdir -p /tmp/agent-radio
 
