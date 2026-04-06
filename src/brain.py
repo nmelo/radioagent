@@ -522,6 +522,28 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
             return FileResponse(skill_path, filename="dj.skill", media_type="application/octet-stream")
         return JSONResponse(status_code=404, content={"error": "dj.skill not found"})
 
+    @app.get("/stream")
+    def stream_proxy():
+        """Reverse-proxy the Icecast audio stream so the dashboard works without a separate port."""
+        import urllib.request
+        icecast_url = f"http://{config.icecast_host}:{config.icecast_port}{config.icecast_mount}"
+        try:
+            upstream = urllib.request.urlopen(icecast_url)
+        except Exception:
+            return JSONResponse(status_code=502, content={"error": "Icecast stream unavailable"})
+
+        def generate():
+            try:
+                while True:
+                    chunk = upstream.read(8192)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                upstream.close()
+
+        return StreamingResponse(generate(), media_type="audio/mpeg")
+
     @app.get("/tones/{name}.wav")
     def serve_tone(name: str):
         if not all(c.isalnum() or c == '_' for c in name):
