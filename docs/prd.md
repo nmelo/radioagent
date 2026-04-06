@@ -63,12 +63,12 @@ $ ./start.sh
 [agent-radio] Icecast already running (systemd), adopting
 [agent-radio] Starting Liquidsoap... socket ready
 [agent-radio] Starting brain... listening on :8001
-[agent-radio] Stream: http://192.168.1.100:8000/stream
-[agent-radio] Webhook: http://192.168.1.100:8001/announce
-[agent-radio] Dashboard: http://192.168.1.100:8001/
+[agent-radio] Stream: http://YOUR_HOST:8000/stream
+[agent-radio] Webhook: http://YOUR_HOST:8001/announce
+[agent-radio] Dashboard: http://YOUR_HOST:8001/
 ```
 
-Operator opens `http://192.168.1.100:8001/` in a browser. The dashboard shows a Connect button. Click it to start listening. Ambient music plays from the curated library (~/ Music on workbench). The wire feed shows announcement history and live events.
+Operator opens `http://YOUR_HOST:8001/` in a browser. The dashboard shows a Connect button. Click it to start listening. Ambient music plays from the curated library (~/ Music on workbench). The wire feed shows announcement history and live events.
 
 ### 5.2 Announcement Arrives
 
@@ -89,7 +89,7 @@ The listener hears:
 
 ### 5.3 Using the Dashboard
 
-The operator opens `http://192.168.1.100:8001/` in a browser. The dashboard shows:
+The operator opens `http://YOUR_HOST:8001/` in a browser. The dashboard shows:
 
 - **Now Playing**: current track title, artist, album (from Icecast metadata). A Skip button advances to the next track.
 - **Up Next**: the next track in the shuffle queue.
@@ -105,7 +105,7 @@ This journey applies when AI music generation is enabled. MusicGen fails with CU
 ### 5.5 Manual Announcement
 
 ```
-$ curl -X POST http://192.168.1.100:8001/announce \
+$ curl -X POST http://YOUR_HOST:8001/announce \
     -H 'Content-Type: application/json' \
     -d '{"detail": "Phase 3 is complete. Shipping v1.7.0."}'
 ```

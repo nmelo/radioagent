@@ -1,6 +1,6 @@
 # Audio Tools for Agent Radio
 
-Tools to install on workbench (192.168.1.100, Ubuntu) for audio management.
+Tools to install on workbench (Ubuntu) for audio management.
 
 ## Install (one command)
 
@@ -93,7 +93,7 @@ ffmpeg -y -i "$INPUT" \
 
 ```bash
 # Real-time LUFS of the Icecast stream (momentary/short-term/integrated + true peak)
-ffmpeg -i http://192.168.1.100:8000/stream -filter_complex ebur128=peak=true -f null - 2>&1 | grep -E "M:|S:|I:|Peak:"
+ffmpeg -i http://YOUR_HOST:8000/stream -filter_complex ebur128=peak=true -f null - 2>&1 | grep -E "M:|S:|I:|Peak:"
 ```
 
 Output: `t: 3.5 TARGET:-14 LUFS M: -16.2 S: -15.8 I: -15.5 LUFS LRA: 5.3 LU FTPK: -3.2 -3.1 dBFS`
@@ -102,7 +102,7 @@ Output: `t: 3.5 TARGET:-14 LUFS M: -16.2 S: -15.8 I: -15.5 LUFS LRA: 5.3 LU FTPK
 
 ```bash
 # 10-second sample from stream
-ffmpeg -i http://192.168.1.100:8000/stream -t 10 -f wav - 2>/dev/null | sox -t wav - -n stats
+ffmpeg -i http://YOUR_HOST:8000/stream -t 10 -f wav - 2>/dev/null | sox -t wav - -n stats
 ```
 
 ## 4. File Inspection
@@ -120,7 +120,7 @@ ffprobe -v quiet -print_format json -show_format -show_streams track.flac
 ffprobe -v quiet -show_entries format=duration -of csv=p=0 track.flac
 
 # Check stream codec/bitrate
-ffprobe -v quiet -print_format json -show_format -show_streams -timeout 5000000 http://192.168.1.100:8000/stream
+ffprobe -v quiet -print_format json -show_format -show_streams -timeout 5000000 http://YOUR_HOST:8000/stream
 
 # ReplayGain tags
 mediainfo --Inform="Audio;RG=%replay_gain_track_gain%" track.flac
@@ -130,17 +130,17 @@ mediainfo --Inform="Audio;RG=%replay_gain_track_gain%" track.flac
 
 ```bash
 # Icecast JSON status (mount info, listeners, bitrate)
-curl -s http://192.168.1.100:8000/status-json.xsl | jq '.icestats.source'
+curl -s http://YOUR_HOST:8000/status-json.xsl | jq '.icestats.source'
 
 # Simple up/down check
-curl -sf -o /dev/null -m 5 http://192.168.1.100:8000/stream && echo "UP" || echo "DOWN"
+curl -sf -o /dev/null -m 5 http://YOUR_HOST:8000/stream && echo "UP" || echo "DOWN"
 
 # Liquidsoap telnet (current track, queue status)
 echo "request.on_air" | nc -q1 localhost 1234
 echo "radio.remaining" | nc -q1 localhost 1234
 
 # Validate stream audio integrity (10 seconds)
-ffmpeg -i http://192.168.1.100:8000/stream -t 10 -f null - 2>&1 | grep -i "error\|warning"
+ffmpeg -i http://YOUR_HOST:8000/stream -t 10 -f null - 2>&1 | grep -i "error\|warning"
 ```
 
 ## 6. Audio Manipulation (sox)

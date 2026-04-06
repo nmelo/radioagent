@@ -26,14 +26,14 @@
 - `brain.py` with FastAPI webhook server, rate limiter, announcement pipeline, Liquidsoap socket push, SSE events, dashboard API endpoints
 - `dashboard.html` with now-playing, wire feed (typing animation), skip, mute/unmute, volume, auto-reconnect
 - `start.sh` / `stop.sh` with health checks, PID management, process monitoring
-- Deployed to workbench (192.168.1.100) via git clone to /opt/agent-radio
+- Deployed to workbench via git clone to /opt/agent-radio
 
 **Build approach:** Tracer bullet (thin end-to-end slice first), then widened each component.
 
 **Success gate (passed):**
 - `./start.sh` launches all three processes, logs URLs
-- Dashboard at `http://192.168.1.100:8001/` shows now-playing and plays stream
-- `curl -X POST http://192.168.1.100:8001/announce -d '{"detail":"test"}'` produces audible voice
+- Dashboard at `http://YOUR_HOST:8001/` shows now-playing and plays stream
+- `curl -X POST http://YOUR_HOST:8001/announce -d '{"detail":"test"}'` produces audible voice
 - Music ducks during announcements, restores after
 - Mute/unmute, skip, volume all functional
 - QA integration pass completed
@@ -140,4 +140,4 @@
 | Audio encoding | MP3 192kbps via Liquidsoap | Broadest client compatibility |
 | Dashboard | Single HTML file (vanilla JS) | No build tools, served by brain |
 | Audio tools | sox, ffmpeg, rsgain, bs1770gain | See docs/audio-tools.md |
-| Deployment | Ubuntu on workbench (192.168.1.100) | RTX 5080, git clone to /opt/agent-radio |
+| Deployment | Ubuntu on workbench | RTX 5080, git clone to /opt/agent-radio |
