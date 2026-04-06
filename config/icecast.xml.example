@@ -21,7 +21,8 @@
         <admin-password>CHANGE_ME_admin</admin-password>
     </authentication>
 
-    <hostname>0.0.0.0</hostname>
+    <!-- Set to your server's hostname or public IP; used in stream URLs -->
+    <hostname>localhost</hostname>
 
     <listen-socket>
         <port>8000</port>
