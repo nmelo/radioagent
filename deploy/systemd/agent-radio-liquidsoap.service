@@ -8,7 +8,7 @@ Type=simple
 # TODO: Change 'radioagent' to the user that will run Agent Radio on your system
 User=radioagent
 WorkingDirectory=/opt/agent-radio
-ExecStart=/usr/bin/liquidsoap /opt/agent-radio/radio.liq
+ExecStart=/usr/bin/liquidsoap /opt/agent-radio/config/radio.liq
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

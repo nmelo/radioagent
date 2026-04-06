@@ -168,7 +168,7 @@ if [ "${SKIP_CONFIG:-false}" != "true" ]; then
     sed -e "s|music_dir:.*|music_dir: $MUSIC_DIR_PATH|" \
         -e "s|icecast_password:.*|icecast_password: $ICECAST_PW|" \
         -e "s|tones_dir:.*|tones_dir: $INSTALL_DIR/audio/tones|" \
-        "$INSTALL_DIR/config.yaml.example" > "$INSTALL_DIR/config.yaml"
+        "$INSTALL_DIR/config/config.yaml.example" > "$INSTALL_DIR/config.yaml"
 
     # Disable AI music if no GPU
     if [ "$HAS_GPU" = false ]; then
@@ -267,7 +267,7 @@ Wants=icecast2.service
 Type=simple
 User=$REAL_USER
 WorkingDirectory=$INSTALL_DIR
-ExecStart=/usr/bin/liquidsoap $INSTALL_DIR/radio.liq
+ExecStart=/usr/bin/liquidsoap $INSTALL_DIR/config/radio.liq
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -323,7 +323,7 @@ echo -e "  Config:        ${INSTALL_DIR}/config.yaml"
 echo ""
 echo -e "${BOLD}Start manually:${NC}"
 echo "  sudo systemctl start icecast2"
-echo "  liquidsoap $INSTALL_DIR/radio.liq &"
+echo "  liquidsoap $INSTALL_DIR/config/radio.liq &"
 echo "  $VENV_DIR/bin/python -m brain &"
 echo ""
 if [[ ! "${INSTALL_SYSTEMD:-y}" =~ ^[Nn]$ ]]; then

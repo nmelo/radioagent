@@ -121,7 +121,7 @@ else
     rm -f "$SOCKET_PATH"
 
     echo "Starting Liquidsoap..."
-    liquidsoap "$RADIO_DIR/radio.liq" &
+    liquidsoap "$RADIO_DIR/config/radio.liq" &
     echo $! > "$LIQUIDSOAP_PID"
     echo "  Liquidsoap started (pid $(cat "$LIQUIDSOAP_PID"))"
 

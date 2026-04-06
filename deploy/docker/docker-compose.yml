@@ -39,7 +39,7 @@ services:
   liquidsoap:
     image: savonet/liquidsoap:v2.3.2
     volumes:
-      - ../../radio.liq:/radio.liq:ro
+      - ../../config/radio.liq:/radio.liq:ro
       - shared:/tmp/agent-radio
       - ${MUSIC_DIR:-../../music}:/music:ro
     command: ["liquidsoap", "/radio.liq"]
