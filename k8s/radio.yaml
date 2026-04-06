@@ -1,0 +1,114 @@
+---
+# Combined pod: liquidsoap + brain share an emptyDir for the Unix socket
+# and WAV files at /tmp/agent-radio.
+#
+# NODE PLACEMENT: Scheduled on workbench because:
+#   - /home/nmelo/Music lives on workbench
+#   - RTX 5080 GPU available on workbench for Kokoro TTS
+# To move to spark1/spark2 (GB10 GPU), replicate music to that node
+# and update the nodeSelector accordingly.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: radio
+  namespace: radio-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: radio
+  template:
+    metadata:
+      labels:
+        app: radio
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: workbench
+      initContainers:
+        - name: init-shared
+          image: busybox
+          command: ["sh", "-c", "mkdir -p /tmp/agent-radio && chmod 777 /tmp/agent-radio"]
+          volumeMounts:
+            - name: shared
+              mountPath: /tmp/agent-radio
+      containers:
+        # --- Liquidsoap sidecar ---
+        - name: liquidsoap
+          image: savonet/liquidsoap:v2.2.4
+          command: ["liquidsoap", "/radio.liq"]
+          volumeMounts:
+            - name: shared
+              mountPath: /tmp/agent-radio
+            - name: radio-liq
+              mountPath: /radio.liq
+              subPath: radio.liq
+            - name: music
+              mountPath: /music
+              readOnly: true
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 1Gi
+
+        # --- Brain sidecar ---
+        - name: brain
+          image: localhost:5000/radio-agent-brain:latest
+          ports:
+            - containerPort: 8001
+          volumeMounts:
+            - name: shared
+              mountPath: /tmp/agent-radio
+            - name: brain-config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+            - name: tones
+              mountPath: /tones
+              readOnly: true
+          resources:
+            requests:
+              cpu: 500m
+              memory: 4Gi
+            limits:
+              cpu: 4000m
+              memory: 8Gi
+          readinessProbe:
+            httpGet:
+              path: /now-playing
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: shared
+          emptyDir: {}
+        - name: radio-liq
+          configMap:
+            name: radio-liq
+        - name: brain-config
+          configMap:
+            name: brain-config
+        - name: music
+          hostPath:
+            path: /home/nmelo/Music
+            type: Directory
+        - name: tones
+          hostPath:
+            path: /opt/agent-radio/tones
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: brain
+  namespace: radio-agent
+spec:
+  type: NodePort
+  selector:
+    app: radio
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001
+      nodePort: 30810

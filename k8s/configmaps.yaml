@@ -1,0 +1,182 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: icecast-config
+  namespace: radio-agent
+data:
+  icecast.xml: |
+    <icecast>
+        <location>Agent Radio</location>
+        <admin>icemaster@localhost</admin>
+
+        <limits>
+            <clients>100</clients>
+            <sources>2</sources>
+            <queue-size>524288</queue-size>
+            <client-timeout>30</client-timeout>
+            <header-timeout>15</header-timeout>
+            <source-timeout>10</source-timeout>
+            <burst-on-connect>1</burst-on-connect>
+            <burst-size>65535</burst-size>
+        </limits>
+
+        <authentication>
+            <source-password>agent-radio-src</source-password>
+            <relay-password>agent-radio-relay</relay-password>
+            <admin-user>admin</admin-user>
+            <admin-password>agent-radio-admin</admin-password>
+        </authentication>
+
+        <hostname>0.0.0.0</hostname>
+
+        <listen-socket>
+            <port>8000</port>
+        </listen-socket>
+
+        <http-headers>
+            <header name="Access-Control-Allow-Origin" value="*" />
+        </http-headers>
+
+        <fileserve>1</fileserve>
+
+        <paths>
+            <basedir>/usr/share/icecast2</basedir>
+            <logdir>/var/log/icecast2</logdir>
+            <webroot>/usr/share/icecast2/web</webroot>
+            <adminroot>/usr/share/icecast2/admin</adminroot>
+            <alias source="/" destination="/status.xsl"/>
+        </paths>
+
+        <logging>
+            <accesslog>access.log</accesslog>
+            <errorlog>error.log</errorlog>
+            <loglevel>3</loglevel>
+            <logsize>10000</logsize>
+        </logging>
+
+        <security>
+            <chroot>0</chroot>
+        </security>
+    </icecast>
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: radio-liq
+  namespace: radio-agent
+data:
+  radio.liq: |
+    # Radio Agent - Liquidsoap config for Kubernetes (v2.2.4)
+
+    # --- Logging ---
+    settings.log.file := true
+    settings.log.file.path := "/tmp/agent-radio/liquidsoap.log"
+    settings.log.level := 3
+
+    settings.server.socket := true
+    settings.server.socket.path := "/tmp/agent-radio/liquidsoap.sock"
+
+    # --- Music source ---
+    music = playlist(
+      id="music",
+      "/music",
+      mode="random",
+      reload_mode="watch",
+      prefetch=2
+    )
+
+    # Log track changes
+    music = source.on_track(music, fun(m) -> begin
+      filename = list.assoc(default="unknown", "filename", m)
+      title = list.assoc(default="", "title", m)
+      log.important("TRACK_START: file=#{filename} title=#{title}")
+    end)
+
+    # Log metadata updates
+    music = source.on_metadata(music, fun(m) -> begin
+      title = list.assoc(default="", "title", m)
+      artist = list.assoc(default="", "artist", m)
+      filename = list.assoc(default="", "filename", m)
+      log.important("METADATA: title=#{title} artist=#{artist} file=#{filename}")
+    end)
+
+    # Skip silent tracks
+    music = blank.skip(max_blank=5., threshold=-40., track_sensitive=true, music)
+
+    # Normalize to stereo
+    music = audio_to_stereo(music)
+
+    # Crossfade
+    music = crossfade(duration=3.0, music)
+
+    # Music volume control
+    music_volume = interactive.float("music_volume", 1.0)
+    music = amplify(music_volume, music)
+
+    # Safety net
+    music = mksafe(music)
+
+    # Blank detection
+    music = blank.detect(
+      max_blank=10.,
+      threshold=-40.,
+      { log.severe("BLANK_DETECTED: mksafe fallback active, music source may be down") },
+      on_noise={ log.important("BLANK_RECOVERED: music source resumed") },
+      music
+    )
+
+    # --- Voice announcement queue ---
+    voice = request.queue(id="voice")
+    voice = amplify(3.5, voice)
+
+    # --- Ambient tones queue ---
+    tones = request.queue(id="tones")
+    tones = amplify(2.0, tones)
+
+    # --- Mix ---
+    music_with_tones = smooth_add(normal=music, special=tones)
+    radio = smooth_add(normal=music_with_tones, special=voice)
+
+    # --- Output to Icecast (k8s service name) ---
+    output.icecast(
+      %mp3(bitrate=192, samplerate=44100, stereo=true),
+      host="icecast",
+      port=8000,
+      password="agent-radio-src",
+      mount="/stream",
+      fallible=true,
+      radio
+    )
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: brain-config
+  namespace: radio-agent
+data:
+  config.yaml: |
+    music_dir: /music
+    music_ai_enabled: false
+    music_ai_prompt: "calm ambient music, soft pads, gentle drone, deep reverb"
+
+    tts_engine: kokoro
+    tts_voice: af_heart
+    tts_speed: 1.0
+
+    webhook_port: 8001
+    webhook_rate_limit: 10
+
+    liquidsoap_socket: /tmp/agent-radio/liquidsoap.sock
+
+    icecast_host: icecast
+    icecast_port: 8000
+    icecast_mount: /stream
+    icecast_password: agent-radio-src
+
+    tones_dir: /tones
+
+    suppress_kinds:
+      - "*.idle"
+      - "*.message"
+    max_announcement_words: 40

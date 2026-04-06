@@ -1,0 +1,57 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: icecast
+  namespace: radio-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: icecast
+  template:
+    metadata:
+      labels:
+        app: icecast
+    spec:
+      containers:
+        - name: icecast
+          image: localhost:5000/radio-agent-icecast:latest
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - name: icecast-config
+              mountPath: /etc/icecast2/icecast.xml
+              subPath: icecast.xml
+          readinessProbe:
+            httpGet:
+              path: /status-json.xsl
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: icecast-config
+          configMap:
+            name: icecast-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: icecast
+  namespace: radio-agent
+spec:
+  type: NodePort
+  selector:
+    app: icecast
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      nodePort: 30808
