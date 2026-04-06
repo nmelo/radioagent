@@ -1,4 +1,7 @@
 ---
+# Icecast config. Passwords here must match the values in secrets.yaml.
+# Because icecast reads a raw XML file (not env vars), there is no automatic
+# Secret injection — you must keep these in sync manually.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -22,10 +25,13 @@ data:
         </limits>
 
         <authentication>
-            <source-password>agent-radio-src</source-password>
-            <relay-password>agent-radio-relay</relay-password>
+            <!-- Must match icecast-credentials Secret: source-password -->
+            <source-password>CHANGE_ME</source-password>
+            <!-- Must match icecast-credentials Secret: relay-password -->
+            <relay-password>CHANGE_ME</relay-password>
             <admin-user>admin</admin-user>
-            <admin-password>agent-radio-admin</admin-password>
+            <!-- Must match icecast-credentials Secret: admin-password -->
+            <admin-password>CHANGE_ME</admin-password>
         </authentication>
 
         <hostname>0.0.0.0</hostname>
@@ -60,6 +66,8 @@ data:
         </security>
     </icecast>
 ---
+# Liquidsoap config. The source-password must match icecast-credentials Secret.
+# Liquidsoap reads a raw .liq file — update CHANGE_ME to match secrets.yaml.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -139,16 +147,20 @@ data:
     radio = smooth_add(normal=music_with_tones, special=voice)
 
     # --- Output to Icecast (k8s service name) ---
+    # password must match icecast-credentials Secret: source-password
     output.icecast(
       %mp3(bitrate=192, samplerate=44100, stereo=true),
       host="icecast",
       port=8000,
-      password="agent-radio-src",
+      password="CHANGE_ME",
       mount="/stream",
       fallible=true,
       radio
     )
 ---
+# Brain config. icecast_password is also injected via ICECAST_PASSWORD env var
+# from the icecast-credentials Secret (see radio.yaml). The brain process
+# reads the env var at startup and overrides this value when present.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -172,7 +184,8 @@ data:
     icecast_host: icecast
     icecast_port: 8000
     icecast_mount: /stream
-    icecast_password: agent-radio-src
+    # Overridden at runtime by ICECAST_PASSWORD env var from icecast-credentials Secret
+    icecast_password: CHANGE_ME
 
     tones_dir: /tones
 

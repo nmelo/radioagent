@@ -2,11 +2,10 @@
 # Combined pod: liquidsoap + brain share an emptyDir for the Unix socket
 # and WAV files at /tmp/agent-radio.
 #
-# NODE PLACEMENT: Scheduled on workbench because:
-#   - /home/nmelo/Music lives on workbench
-#   - RTX 5080 GPU available on workbench for Kokoro TTS
-# To move to spark1/spark2 (GB10 GPU), replicate music to that node
-# and update the nodeSelector accordingly.
+# NODE PLACEMENT: The music volume must be accessible on the scheduled node.
+# Update the nodeSelector below to match a node in your cluster that has
+# the music directory, and update the hostPath accordingly.
+# Alternatively, replace the hostPath volumes with a PersistentVolumeClaim.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -22,8 +21,10 @@ spec:
       labels:
         app: radio
     spec:
+      # Pin to the node that has your music and tones directories.
+      # Replace YOUR_NODE_HOSTNAME with the output of: kubectl get nodes -o wide
       nodeSelector:
-        kubernetes.io/hostname: workbench
+        kubernetes.io/hostname: YOUR_NODE_HOSTNAME
       initContainers:
         - name: init-shared
           image: busybox
@@ -55,9 +56,17 @@ spec:
 
         # --- Brain sidecar ---
         - name: brain
-          image: localhost:5000/radio-agent-brain:latest
+          # Replace YOUR_REGISTRY with your container registry
+          image: YOUR_REGISTRY/radio-agent-brain:latest
           ports:
             - containerPort: 8001
+          env:
+            # Inject icecast password from Secret so brain reads it at startup
+            - name: ICECAST_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: icecast-credentials
+                  key: source-password
           volumeMounts:
             - name: shared
               mountPath: /tmp/agent-radio
@@ -89,13 +98,17 @@ spec:
         - name: brain-config
           configMap:
             name: brain-config
+        # Music directory on the host node. Replace /data/music with the
+        # actual path on YOUR_NODE_HOSTNAME, or use a PersistentVolumeClaim.
         - name: music
           hostPath:
-            path: /home/nmelo/Music
+            path: /data/music
             type: Directory
+        # Tones directory on the host node. Replace /data/agent-radio/tones
+        # or use a PersistentVolumeClaim.
         - name: tones
           hostPath:
-            path: /opt/agent-radio/tones
+            path: /data/agent-radio/tones
             type: Directory
 ---
 apiVersion: v1

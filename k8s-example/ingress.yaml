@@ -1,0 +1,44 @@
+---
+# Optional: Ingress for external access. Requires an ingress controller
+# (e.g., Traefik, nginx) and cert-manager for TLS.
+# Replace all placeholder values before applying.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: radio-brain-ingress
+  namespace: radio-agent
+  annotations:
+    # Adjust for your ingress controller. Examples:
+    #   Traefik: traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    #   nginx:   nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    # Replace with your cert-manager ClusterIssuer name
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  rules:
+    # Replace radio.example.com with your actual domain
+    - host: radio.example.com
+      http:
+        paths:
+          - path: /stream
+            pathType: Prefix
+            backend:
+              service:
+                name: icecast
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: brain
+                port:
+                  number: 8001
+  tls:
+    - hosts:
+        # Replace radio.example.com with your actual domain
+        - radio.example.com
+      # cert-manager will create this Secret automatically
+      secretName: radio-tls

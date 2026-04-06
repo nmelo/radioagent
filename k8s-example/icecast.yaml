@@ -16,7 +16,9 @@ spec:
     spec:
       containers:
         - name: icecast
-          image: localhost:5000/radio-agent-icecast:latest
+          # Replace YOUR_REGISTRY with your container registry (e.g., ghcr.io/yourorg)
+          # or use a public image such as: moul/icecast2
+          image: YOUR_REGISTRY/radio-agent-icecast:latest
           ports:
             - containerPort: 8000
           volumeMounts:
