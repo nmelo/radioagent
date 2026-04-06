@@ -706,9 +706,9 @@ footer a:hover {
   <div class="nav-inner">
     <a href="#" class="nav-brand">Radio Agent</a>
     <div class="nav-links">
-      <a href="/dj.skill"><span>DJ Skill</span></a>
-      <a href="/blog/"><span>Blog</span></a>
-      <a href="https://github.com/nmelo/radioagent" aria-label="GitHub"><svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
+      <a href="/dj.skill" onclick="posthog.capture('dj_skill_download')"><span>DJ Skill</span></a>
+      <a href="/blog/" onclick="posthog.capture('blog_click')"><span>Blog</span></a>
+      <a href="https://github.com/nmelo/radioagent" aria-label="GitHub" onclick="posthog.capture('github_click')"><svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
       <button class="nav-copy-btn" id="copySetupBtn" onclick="copySetup()"><span>Copy Instructions for AI</span></button>
     </div>
   </div>
@@ -939,6 +939,7 @@ function copySetup() {
     'The DJ skill also has an ambient narration protocol. Read its SKILL.md for details on how and when to announce.';
   var btn = document.getElementById('copySetupBtn');
   navigator.clipboard.writeText(text).then(function() {
+    posthog.capture('agent_instructions_copy');
     var original = btn.textContent;
     btn.textContent = 'Copied';
     btn.classList.add('copied');
@@ -951,6 +952,7 @@ function copySetup() {
 function copyCurl() {
   var btn = document.getElementById('curlCopyBtn');
   navigator.clipboard.writeText('curl -sSL https://radioagent.live/install.sh | bash').then(function() {
+    posthog.capture('install_command_copy');
     btn.classList.add('copied');
     setTimeout(function() { btn.classList.remove('copied'); }, 2000);
   });
@@ -984,6 +986,7 @@ function copyCurl() {
 
   audio.addEventListener('play', function() {
     playing = true;
+    posthog.capture('demo_play');
     // Safe: static SVG constant, no user content
     icon.innerHTML = PAUSE_PATH;
   });
@@ -996,6 +999,7 @@ function copyCurl() {
 
   audio.addEventListener('ended', function() {
     playing = false;
+    posthog.capture('demo_complete');
     // Safe: static SVG constant, no user content
     icon.innerHTML = PLAY_PATH;
     progress.value = 0;
