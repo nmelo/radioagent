@@ -78,7 +78,7 @@ output.icecast(
   %mp3(bitrate=192, samplerate=44100, stereo=true),
   host=environment.get(default="localhost", "ICECAST_HOST"),
   port=8000,
-  password="agent-radio-src",
+  password=environment.get(default="CHANGE_ME_source", "ICECAST_SOURCE_PASSWORD"),
   mount="/stream",
   fallible=true,
   radio

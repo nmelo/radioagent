@@ -45,6 +45,8 @@ services:
     command: ["liquidsoap", "/radio.liq"]
     environment:
       ICECAST_HOST: icecast
+      ICECAST_SOURCE_PASSWORD: CHANGE_ME_source
+      RADIO_MUSIC_DIR: /music
       LIQUIDSOAP_SOCKET_PATH: /tmp/agent-radio/liquidsoap.sock
     depends_on:
       icecast:
