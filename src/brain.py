@@ -560,6 +560,7 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         data["announcements_muted"] = announcements_muted
         data["tones_muted"] = tones_muted
         data["next"] = get_next_track(config.liquidsoap_socket)
+        data["music_dir"] = str(config.music_dir)
         return data
 
     @app.get("/recent-announcements")

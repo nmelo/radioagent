@@ -196,6 +196,73 @@ body::after {
   margin-top: 4px;
 }
 
+/* --- Music Info Tooltip --- */
+
+.now-playing-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.music-info-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(115, 115, 115, 0.3);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color 0.2s, border-color 0.2s;
+  position: relative;
+}
+.music-info-btn:hover {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+
+.music-info-tooltip {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  transform: translateX(-50%);
+  background: #1a1a1a;
+  border: 1px solid rgba(115, 115, 115, 0.3);
+  border-radius: 6px;
+  padding: 12px 14px;
+  width: 280px;
+  z-index: 100;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  line-height: 1.6;
+  color: var(--text-dim);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+.music-info-tooltip.visible {
+  display: block;
+}
+.music-info-tooltip .info-path {
+  color: var(--amber);
+  word-break: break-all;
+}
+.music-info-tooltip .info-label {
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 8px;
+  margin-bottom: 2px;
+}
+.music-info-tooltip .info-label:first-child {
+  margin-top: 0;
+}
+
 /* --- Up Next --- */
 
 .up-next-title {
@@ -717,7 +784,20 @@ body::after {
 
   <section class="panel">
     <div class="panel-label">NOW PLAYING</div>
-    <div class="now-playing-title" id="npTitle">Waiting for signal...</div>
+    <div class="now-playing-header">
+      <div class="now-playing-title" id="npTitle">Waiting for signal...</div>
+      <button class="music-info-btn" id="musicInfoBtn" aria-label="Music source info">i
+        <div class="music-info-tooltip" id="musicInfoTooltip">
+          <div class="info-label">Music folder</div>
+          <div class="info-path" id="infoMusicDir">...</div>
+          <div class="info-label">Supported formats</div>
+          <div>.mp3, .ogg, .flac, .wav</div>
+          <div style="margin-top: 6px;">Drop files into this folder. Radio Agent picks them up automatically.</div>
+          <div class="info-label">Docker</div>
+          <div>Set MUSIC_DIR in your .env file to change the host mount path.</div>
+        </div>
+      </button>
+    </div>
     <div class="now-playing-meta" id="npMeta"></div>
   </section>
 
@@ -1112,6 +1192,20 @@ body::after {
     tonesToggle.setAttribute('aria-label', state.tonesOn ? 'Mute tones' : 'Unmute tones');
   }
 
+  // --- Music Info Tooltip ---
+
+  var musicInfoBtn = document.getElementById('musicInfoBtn');
+  var musicInfoTooltip = document.getElementById('musicInfoTooltip');
+
+  musicInfoBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    musicInfoTooltip.classList.toggle('visible');
+  });
+
+  document.addEventListener('click', function() {
+    musicInfoTooltip.classList.remove('visible');
+  });
+
   // --- Event Listeners ---
 
   connectBtn.addEventListener('click', connect);
@@ -1146,6 +1240,9 @@ body::after {
     if (data.artist) parts.push(data.artist);
     if (data.album) parts.push(data.album);
     npMeta.textContent = parts.join(' \u2014 ');
+    if (data.music_dir) {
+      document.getElementById('infoMusicDir').textContent = data.music_dir;
+    }
     if (data.next) {
       var nextParts = [data.next.title];
       if (data.next.artist) nextParts.push(data.next.artist);
