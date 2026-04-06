@@ -152,7 +152,7 @@ Failures and errors use a different voice (male, am_michael) than normal announc
 3. Rewrite the text following the personality and event guidelines above
 4. Verify: under 40 words, no anti-patterns, information survives if personality is removed
 5. Call: `initech announce --agent <agent> --kind <kind> "<rewritten text>"`
-   Or if initech announce is not available: `curl -s -X POST http://192.168.1.100:8001/announce -H 'Content-Type: application/json' -d '{"detail":"<rewritten text>","agent":"<agent>","kind":"<kind>"}'`
+   Or if initech announce is not available: `curl -s -X POST http://YOUR_HOST:8001/announce -H 'Content-Type: application/json' -d '{"detail":"<rewritten text>","agent":"<agent>","kind":"<kind>"}'`
 
 ## Ambient Narration Protocol
 
