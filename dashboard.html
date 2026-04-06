@@ -819,7 +819,7 @@ body::after {
 (function() {
   'use strict';
 
-  var STREAM_URL = 'http://' + window.location.hostname + ':8000/stream';
+  var STREAM_URL = window.location.protocol + '//' + window.location.host + '/stream';
   var TYPING_SPEED = 30;
   var NP_POLL_INTERVAL = 3000;
   var MAX_WIRE_ITEMS = 10;
