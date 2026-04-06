@@ -38,10 +38,13 @@ services:
   liquidsoap:
     image: savonet/liquidsoap:v2.3.2
     volumes:
-      - ./docker/radio.liq:/radio.liq:ro
+      - ./radio.liq:/radio.liq:ro
       - shared:/tmp/agent-radio
       - ${MUSIC_DIR:-./music}:/music:ro
     command: ["liquidsoap", "/radio.liq"]
+    environment:
+      ICECAST_HOST: icecast
+      LIQUIDSOAP_SOCKET_PATH: /tmp/agent-radio/liquidsoap.sock
     depends_on:
       icecast:
         condition: service_healthy

@@ -7,7 +7,7 @@ settings.log.file.path := "/tmp/agent-radio/liquidsoap.log"
 settings.log.level := 3
 
 settings.server.socket := true
-settings.server.socket.path := "/tmp/agent-radio.sock"
+settings.server.socket.path := environment.get(default="/tmp/agent-radio.sock", "LIQUIDSOAP_SOCKET_PATH")
 
 # --- Music source ---
 music_dir = environment.get(default="/opt/radioagent/music", "RADIO_MUSIC_DIR")
@@ -76,7 +76,7 @@ radio = smooth_add(normal=music_with_tones, special=voice)
 # --- Output to Icecast ---
 output.icecast(
   %mp3(bitrate=192, samplerate=44100, stereo=true),
-  host="localhost",
+  host=environment.get(default="localhost", "ICECAST_HOST"),
   port=8000,
   password="agent-radio-src",
   mount="/stream",
