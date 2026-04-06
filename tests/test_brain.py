@@ -396,7 +396,7 @@ class TestApp:
 
     def test_cors_headers(self, client):
         resp = client.options("/now-playing", headers={
-            "Origin": "http://192.168.1.100:8000",
+            "Origin": "http://localhost:8000",
             "Access-Control-Request-Method": "GET",
         })
         assert resp.headers.get("access-control-allow-origin") == "*"
