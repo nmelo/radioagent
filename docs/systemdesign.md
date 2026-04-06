@@ -26,7 +26,7 @@ agent-radio/                    # Flat structure at repo root
   docs/                       # PRD, spec, system design, roadmap, evaluations
 ```
 
-**Note:** Music files live at `/home/nmelo/Music` on workbench (hardcoded in radio.liq). The `config.yaml` `music_dir` field is used by config validation but Liquidsoap reads its own path directly.
+**Note:** Music files live at the path configured in `config.yaml` (`music_dir`), passed to Liquidsoap via the `RADIO_MUSIC_DIR` environment variable.
 
 **Deployment:** Clone repo to `/opt/agent-radio` on workbench. Create venv, install dependencies. Icecast managed by systemd. Liquidsoap and brain managed by start.sh/stop.sh.
 

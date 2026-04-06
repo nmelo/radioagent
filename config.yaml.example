@@ -1,5 +1,5 @@
 # Music
-music_dir: /home/nmelo/Music
+music_dir: /path/to/music
 music_ai_enabled: false
 music_ai_prompt: "calm ambient music, soft pads, gentle drone, deep reverb"
 

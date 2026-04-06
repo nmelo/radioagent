@@ -215,7 +215,7 @@ A good DJ announcement passes these tests:
 
 ## Inspiration
 
-This spec draws from writ-fm (/Users/nmelo/Desktop/writ-fm), an AI-powered 24/7 internet radio station with five distinct DJ personas, time-of-day mood modulation, and disciplined creative writing guidelines. Key lessons borrowed:
+This spec draws from writ-fm, an AI-powered 24/7 internet radio station with five distinct DJ personas, time-of-day mood modulation, and disciplined creative writing guidelines. Key lessons borrowed:
 
 - Personality comes from constraints (anti-patterns), not freedom
 - Dry humor earned from the material, never injected
