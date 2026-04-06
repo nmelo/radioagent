@@ -6,8 +6,9 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+ARG REQUIREMENTS=requirements.txt
+COPY requirements.txt requirements-cpu.txt ./
+RUN pip install --no-cache-dir -r ${REQUIREMENTS}
 
 COPY src/ src/
 COPY skills/ skills/

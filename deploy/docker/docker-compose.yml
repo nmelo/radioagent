@@ -55,6 +55,11 @@ services:
 
   brain:
     <<: *brain-base
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.brain
+      args:
+        REQUIREMENTS: requirements-cpu.txt
     profiles:
       - cpu
 
