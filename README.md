@@ -23,7 +23,7 @@ docker compose -f deploy/docker/docker-compose.yml up
 ```bash
 git clone https://github.com/nmelo/radioagent.git
 cd radioagent
-./install.sh
+sudo ./scripts/install.sh
 ```
 
 Listen: `http://localhost:8000/stream`

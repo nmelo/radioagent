@@ -25,13 +25,13 @@
 - `script_generator.py` with event kind templates, text cleaning, suppression
 - `brain.py` with FastAPI webhook server, rate limiter, announcement pipeline, Liquidsoap socket push, SSE events, dashboard API endpoints
 - `dashboard.html` with now-playing, wire feed (typing animation), skip, mute/unmute, volume, auto-reconnect
-- `start.sh` / `stop.sh` with health checks, PID management, process monitoring
+- `scripts/start.sh` / `scripts/stop.sh` with health checks, PID management, process monitoring
 - Deployed to workbench via git clone to /opt/agent-radio
 
 **Build approach:** Tracer bullet (thin end-to-end slice first), then widened each component.
 
 **Success gate (passed):**
-- `./start.sh` launches all three processes, logs URLs
+- `./scripts/start.sh` launches all three processes, logs URLs
 - Dashboard at `http://YOUR_HOST:8001/` shows now-playing and plays stream
 - `curl -X POST http://YOUR_HOST:8001/announce -d '{"detail":"test"}'` produces audible voice
 - Music ducks during announcements, restores after

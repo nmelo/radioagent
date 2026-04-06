@@ -158,9 +158,9 @@ EOF
 install_bare_metal() {
     if [ "$EUID" -ne 0 ]; then
         info "Bare-metal install needs root. Re-running with sudo..."
-        exec sudo bash "$INSTALL_DIR/install.sh"
+        exec sudo bash "$INSTALL_DIR/scripts/install.sh"
     else
-        exec bash "$INSTALL_DIR/install.sh"
+        exec bash "$INSTALL_DIR/scripts/install.sh"
     fi
 }
 

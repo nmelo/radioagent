@@ -183,7 +183,7 @@ All endpoints return JSON. CORS is enabled for all origins (LAN use).
 
 ### 3.1 Startup
 
-1. `./start.sh` checks for stale PID files and port conflicts
+1. `./scripts/start.sh` checks for stale PID files and port conflicts
 2. Starts Icecast via systemd (or adopts existing instance)
 3. Starts Liquidsoap, waits up to 15 seconds for Unix socket
 4. Starts brain (`venv/bin/python -m brain`), waits up to 30 seconds for port 8001

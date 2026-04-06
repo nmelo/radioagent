@@ -37,7 +37,7 @@ HOSTNAME=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
 full_shutdown() {
     echo ""
     echo "start.sh: received shutdown signal, stopping all services..."
-    "$RADIO_DIR/stop.sh" 2>/dev/null || true
+    "$RADIO_DIR/scripts/stop.sh" 2>/dev/null || true
     exit 0
 }
 
@@ -195,7 +195,7 @@ echo "  Webhook: http://${HOSTNAME}:${WEBHOOK_PORT}/announce"
 echo "  Admin:   http://${HOSTNAME}:${ICECAST_PORT}/admin/"
 echo "============================================"
 echo ""
-echo "Stop with: $RADIO_DIR/stop.sh"
+echo "Stop with: $RADIO_DIR/scripts/stop.sh"
 
 # --- Monitor ---
 # Only SIGINT/SIGTERM to start.sh itself triggers full shutdown.

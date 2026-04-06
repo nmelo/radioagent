@@ -5,7 +5,7 @@ set -euo pipefail
 # Requires: Ubuntu 22.04+ or Debian 12+
 # Usage: sudo ./install.sh
 
-INSTALL_DIR="$(cd "$(dirname "$0")" && pwd)"
+INSTALL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 VENV_DIR="$INSTALL_DIR/venv"
 
 # --- Colors ---
@@ -38,7 +38,7 @@ case "$ID" in
     *)
         fail "Unsupported distribution: $PRETTY_NAME
 Agent Radio bare-metal install requires Ubuntu or Debian.
-For other platforms, use Docker: docker compose up -d"
+For other platforms, use Docker: docker compose -f deploy/docker/docker-compose.yml up -d"
         ;;
 esac
 
@@ -254,9 +254,6 @@ ask "Install systemd service units? [Y/n]: "
 read -r INSTALL_SYSTEMD
 
 if [[ ! "$INSTALL_SYSTEMD" =~ ^[Nn]$ ]]; then
-    # Create systemd unit directory in repo if not present
-    mkdir -p "$INSTALL_DIR/systemd"
-
     cat > /etc/systemd/system/agent-radio-liquidsoap.service <<UNIT
 [Unit]
 Description=Agent Radio - Liquidsoap Audio Engine

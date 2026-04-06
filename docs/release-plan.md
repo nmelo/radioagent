@@ -32,10 +32,10 @@ No Windows bare-metal support. No macOS bare-metal support (due to Liquidsoap). 
 ```bash
 git clone https://github.com/nmelo/agent-radio.git
 cd agent-radio
-./install.sh
+sudo ./scripts/install.sh
 ```
 
-install.sh does:
+scripts/install.sh does:
 1. Detect Ubuntu/Debian (fail on other distros with instructions)
 2. `apt install icecast2 liquidsoap sox` (or grab Liquidsoap .deb from GitHub releases for latest)
 3. Create Python venv, `pip install -e .` (installs kokoro, fastapi, uvicorn, etc.)
@@ -43,7 +43,7 @@ install.sh does:
 5. Install systemd units for brain and liquidsoap
 6. Copy icecast.xml template, set passwords
 7. Create /tmp/agent-radio/ directory
-8. Print: "Run ./start.sh or systemctl start agent-radio"
+8. Print: "Run ./scripts/start.sh or systemctl start agent-radio"
 
 **Install path (Docker):**
 ```bash
@@ -267,7 +267,7 @@ output.icecast(
 
 ### What It Does NOT Do
 
-- Does not start services (operator does `./start.sh` or `systemctl start agent-radio-brain`)
+- Does not start services (operator does `./scripts/start.sh` or `systemctl start agent-radio-brain`)
 - Does not download music (operator provides their own)
 - Does not configure firewall rules (operator's responsibility for LAN access)
 - Does not install Docker (bare-metal only)
@@ -379,7 +379,7 @@ Install: `launchctl load ~/Library/LaunchAgents/com.agent-radio.plist`
 
 ### First-Run Experience
 
-When the user runs `./install.sh` or `docker compose up` for the first time with no `config.yaml`:
+When the user runs `./scripts/install.sh` or `docker compose -f deploy/docker/docker-compose.yml up` for the first time with no `config.yaml`:
 
 1. Detect `config.yaml` missing
 2. Copy `config.yaml.example` to `config.yaml`
@@ -464,8 +464,8 @@ curl -X POST http://localhost:8001/announce \
 ```bash
 git clone https://github.com/nmelo/agent-radio.git
 cd agent-radio
-sudo ./install.sh
-./start.sh
+sudo ./scripts/install.sh
+./scripts/start.sh
 ```
 
 ### Verify It Works
@@ -503,7 +503,8 @@ agent-radio/
     brain/Dockerfile.gpu      # Brain container with CUDA
     icecast/Dockerfile        # Thin Icecast container
     icecast/icecast.xml       # Default Icecast config
-  install.sh                  # Linux bare-metal installer
+  scripts/
+    install.sh               # Linux bare-metal installer
   config.yaml.example         # Config template
   music/
     starter/                  # CC0 ambient tracks shipped with repo
@@ -520,7 +521,7 @@ agent-radio/
 2. **Dockerfiles** - Brain (CPU and GPU variants), Icecast thin layer.
 3. **Starter music** - Download and curate 3-5 CC0 ambient tracks.
 4. **config.yaml.example** - Template with comments and sensible defaults.
-5. **install.sh** - Linux bare-metal installer. Detect GPU, install packages, create venv, systemd units.
+5. **scripts/install.sh** - Linux bare-metal installer. Detect GPU, install packages, create venv, systemd units.
 6. **systemd units** - brain and liquidsoap service files.
 7. **LaunchAgent plist** - macOS Docker auto-start.
 8. **README rewrite** - Quick start for Docker and bare-metal paths.

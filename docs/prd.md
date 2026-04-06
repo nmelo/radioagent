@@ -59,7 +59,7 @@ Team members who want to monitor shared agent sessions remotely. CI/CD operators
 ```
 $ ssh workbench
 $ cd /opt/agent-radio
-$ ./start.sh
+$ ./scripts/start.sh
 [agent-radio] Icecast already running (systemd), adopting
 [agent-radio] Starting Liquidsoap... socket ready
 [agent-radio] Starting brain... listening on :8001

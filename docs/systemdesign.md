@@ -16,7 +16,10 @@ agent-radio/                    # Flat structure at repo root
   radio.liq                   # Liquidsoap configuration
   config.yaml                 # Runtime configuration
   config.yaml.example         # Config template
-  start.sh                    # Starts Icecast + Liquidsoap + brain with health checks
+  scripts/
+    start.sh                  # Starts Icecast + Liquidsoap + brain with health checks
+    stop.sh                   # Graceful shutdown in reverse order
+    install.sh                # Bare-metal installer (Ubuntu/Debian)
   stop.sh                     # Graceful shutdown in reverse order
   pyproject.toml              # Python 3.12+ dependencies
   README.md                   # Quick start guide
@@ -28,7 +31,7 @@ agent-radio/                    # Flat structure at repo root
 
 **Note:** Music files live at the path configured in `config.yaml` (`music_dir`), passed to Liquidsoap via the `RADIO_MUSIC_DIR` environment variable.
 
-**Deployment:** Clone repo to `/opt/agent-radio` on workbench. Create venv, install dependencies. Icecast managed by systemd. Liquidsoap and brain managed by start.sh/stop.sh.
+**Deployment:** Clone repo to `/opt/agent-radio` on workbench. Create venv, install dependencies. Icecast managed by systemd. Liquidsoap and brain managed by scripts/start.sh and scripts/stop.sh.
 
 **Dependency graph:**
 ```
