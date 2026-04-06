@@ -16,4 +16,4 @@ deploy/k8s/
 deploy/systemd/
 .dockerignore
 music/
-tones/
+audio/

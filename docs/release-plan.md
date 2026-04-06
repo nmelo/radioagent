@@ -49,9 +49,9 @@ scripts/install.sh does:
 ```bash
 git clone https://github.com/nmelo/agent-radio.git
 cd agent-radio
-cp config.yaml.example config.yaml
+cp config/config.yaml.example config.yaml
 # Edit config.yaml: set music_dir, passwords
-docker compose --profile gpu up -d
+docker compose -f deploy/docker/docker-compose.yml --profile gpu up -d
 ```
 
 ### Profile 2: Linux + No GPU (degraded TTS speed)
@@ -85,7 +85,7 @@ brew install --cask docker
 
 git clone https://github.com/nmelo/agent-radio.git
 cd agent-radio
-cp config.yaml.example config.yaml
+cp config/config.yaml.example config.yaml
 # Edit config.yaml: set music_dir (will be mounted into container)
 docker compose -f deploy/docker/docker-compose.yml up -d
 ```
@@ -124,7 +124,9 @@ This is documented in an appendix but not the recommended path.
 ```yaml
 services:
   icecast:
-    build: ./docker/icecast
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.icecast
     ports:
       - "${ICECAST_PORT:-8000}:8000"
     volumes:
@@ -286,7 +288,7 @@ Wants=icecast2.service
 Type=simple
 User=agent-radio
 WorkingDirectory=/opt/agent-radio
-ExecStart=/usr/bin/liquidsoap /opt/agent-radio/radio.liq
+ExecStart=/usr/bin/liquidsoap /opt/agent-radio/config/radio.liq
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -447,7 +449,7 @@ After install, the operator drops their own ambient files into the music directo
 ```bash
 git clone https://github.com/nmelo/agent-radio.git
 cd agent-radio
-cp config.yaml.example config.yaml
+cp config/config.yaml.example config.yaml
 docker compose -f deploy/docker/docker-compose.yml up -d
 
 # Open dashboard
@@ -493,26 +495,33 @@ Each release includes:
 - Platform notes in release description
 - Changelog
 
-### Repository Structure Additions
+### Repository Structure
 
 ```
 agent-radio/
-  docker-compose.yml          # Primary install path
-  docker/
-    brain/Dockerfile          # Brain container
-    brain/Dockerfile.gpu      # Brain container with CUDA
-    icecast/Dockerfile        # Thin Icecast container
-    icecast/icecast.xml       # Default Icecast config
+  src/                        # Application code
+    brain.py
+    config.py
+    script_generator.py
+    dashboard.html
+    tts/
+  config/                     # Config templates
+    radio.liq
+    config.yaml.example
+    icecast.xml.example
   scripts/
-    install.sh               # Linux bare-metal installer
-  config.yaml.example         # Config template
-  music/
-    starter/                  # CC0 ambient tracks shipped with repo
-  systemd/
-    agent-radio-brain.service
-    agent-radio-liquidsoap.service
-  launchd/
-    com.agent-radio.plist     # macOS LaunchAgent template
+    start.sh                  # Bare-metal lifecycle
+    stop.sh
+    install.sh                # Linux bare-metal installer
+  deploy/
+    docker/                   # Dockerfiles + docker-compose.yml
+    k8s/                      # Kubernetes example manifests
+    systemd/                  # systemd service unit templates
+  audio/
+    starter-music/            # CC0 ambient seed tracks
+    tones/                    # Sound effects
+  tests/
+  docs/
 ```
 
 ## Implementation Order

@@ -48,6 +48,23 @@ Music sits in the background. Voice announcements duck the music and pull your a
 
 Designed around [calm technology](https://calmtech.com/papers/coming-age-calm-technology) principles: information moves between periphery and center, the user controls the transition, and the system disappears into the background when not needed.
 
+## Project structure
+
+```
+src/          # Application code (brain.py, config.py, script_generator.py, tts/)
+config/       # Config templates (radio.liq, icecast.xml.example, config.yaml.example)
+scripts/      # Lifecycle scripts (start.sh, stop.sh, install.sh)
+deploy/
+  docker/     # Dockerfiles + docker-compose.yml
+  k8s/        # Kubernetes example manifests
+  systemd/    # systemd service unit templates
+audio/
+  tones/      # Sound effects for agent events
+  starter-music/  # Seed tracks (CC0)
+docs/         # PRD, spec, system design, roadmap
+tests/        # pytest suite
+```
+
 ## Architecture
 
 ```

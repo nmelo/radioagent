@@ -51,10 +51,11 @@ AGENTS.md
 # Runtime config (contains passwords)
 config.yaml
 config/icecast.xml
-docker/config.yaml
+deploy/docker/config.yaml
 
-# Music Python init (not needed)
-music/__init__.py
+# Website media (large binaries, served from website/)
+assets/hero.png
+assets/short.mp4
 
 # OS artifacts
 .DS_Store
