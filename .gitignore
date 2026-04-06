@@ -51,6 +51,7 @@ AGENTS.md
 # Runtime config (contains passwords)
 config.yaml
 config/icecast.xml
+docker/config.yaml
 
 # Music Python init (not needed)
 music/__init__.py

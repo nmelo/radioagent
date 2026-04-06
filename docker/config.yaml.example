@@ -17,7 +17,7 @@ liquidsoap_socket: /tmp/agent-radio/liquidsoap.sock
 icecast_host: icecast
 icecast_port: 8000
 icecast_mount: /stream
-icecast_password: agent-radio-src
+icecast_password: CHANGE_ME_source
 
 tones_dir: /tones
 
