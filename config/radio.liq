@@ -46,9 +46,9 @@ music = audio_to_stereo(music)
 music = crossfade(duration=3.0, music)
 
 # Music volume control (0.0-1.0 via socket: var.set music_volume = X)
-# Default 0.3 = level 2, moderate background level
+# Default 0.24 = level 2, moderate background level
 # Placed after blank.skip and crossfade so muting doesn't trigger skip logic
-music_volume = interactive.float("music_volume", 0.3)
+music_volume = interactive.float("music_volume", 0.24)
 music = amplify(music_volume, music)
 
 # Safety net: generate silence if source fails completely
@@ -79,8 +79,11 @@ tones_volume = interactive.float("tones_volume", 0.7)
 tones = amplify(tones_volume, tones)
 tones = amplify(2.0, tones)
 
-# --- Mix: duck music under tones, then duck combined under voice ---
-music_with_tones = smooth_add(normal=music, special=tones)
+# --- Mix: tones overlay on music, then duck combined under voice ---
+# Tones use add() not smooth_add(): short clips (0.5-2s) get eaten by
+# smooth_add's transition ramp. add() sums audio directly, which is the
+# right semantic anyway — a brief chime shouldn't duck the music.
+music_with_tones = add(normalize=false, [music, tones])
 radio = smooth_add(normal=music_with_tones, special=voice)
 
 # --- Output to Icecast ---

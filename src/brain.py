@@ -90,7 +90,7 @@ def get_voice_for_kind(kind: str, default_voice: str) -> str:
 VOICE_LEVELS = {1: 0.3, 2: 0.5, 3: 0.7, 4: 0.85, 5: 1.0}
 DEFAULT_VOICE_LEVEL = 4
 
-MUSIC_LEVELS = {1: 0.15, 2: 0.3, 3: 0.5, 4: 0.7, 5: 1.0}
+MUSIC_LEVELS = {1: 0.15, 2: 0.24, 3: 0.5, 4: 0.7, 5: 1.0}
 DEFAULT_MUSIC_LEVEL = 2
 
 TONES_LEVELS = {1: 0.3, 2: 0.5, 3: 0.7, 4: 0.85, 5: 1.0}
@@ -280,6 +280,8 @@ def push_tone_to_liquidsoap(socket_path: Path, wav_path: Path) -> bool:
                 break
             resp += chunk
         s.close()
+        decoded = resp.decode().replace("END", "").strip()
+        logger.debug("Tones push response: %s", decoded)
         return True
     except (socket.error, socket.timeout) as e:
         logger.warning("Tone push failed: %s", e)
