@@ -46,9 +46,9 @@ music = audio_to_stereo(music)
 music = crossfade(duration=3.0, music)
 
 # Music volume control (0.0-1.0 via socket: var.set music_volume = X)
-# Default 0.24 = level 2, moderate background level
+# Default 0.19 = level 2, moderate background level
 # Placed after blank.skip and crossfade so muting doesn't trigger skip logic
-music_volume = interactive.float("music_volume", 0.24)
+music_volume = interactive.float("music_volume", 0.19)
 music = amplify(music_volume, music)
 
 # Safety net: generate silence if source fails completely
