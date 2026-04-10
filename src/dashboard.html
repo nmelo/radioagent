@@ -1441,8 +1441,10 @@ body::after {
 
     onAirBadge.classList.add('active');
 
-    // Build the typing DOM structure
+    // Build the typing DOM structure (preserve project pill if present)
+    var pill = el.querySelector('.wire-project-tag');
     el.textContent = '';
+    if (pill) el.appendChild(pill);
     var prefix = document.createElement('span');
     prefix.className = 'prefix';
     prefix.textContent = '> ';
