@@ -1057,6 +1057,7 @@ body::after {
   var audio = null;
   var reconnectTimer = null;
   var backoffMs = BACKOFF_INITIAL;
+  var backendUp = true;
 
   function createAudio() {
     if (audio) {
@@ -1101,7 +1102,10 @@ body::after {
       fetch('/now-playing').then(function(r) {
         if (r.ok) {
           createAudio();
-          audio.play().catch(function() {});
+          audio.play().catch(function() {
+            backoffMs = Math.min(backoffMs * 2, BACKOFF_MAX);
+            attemptReconnect();
+          });
         } else {
           backoffMs = Math.min(backoffMs * 2, BACKOFF_MAX);
           attemptReconnect();
@@ -1438,6 +1442,8 @@ body::after {
 
   function fetchNowPlaying() {
     fetch('/now-playing').then(function(r) { return r.json(); }).then(function(data) {
+      var wasDown = !backendUp;
+      backendUp = true;
       updateNowPlaying(data);
       document.title = data.title ? 'RadioAgent: ' + data.title + (data.artist ? ' - ' + data.artist : '') : 'RadioAgent';
       if (typeof data.muted === 'boolean') state.musicPlaying = !data.muted;
@@ -1447,7 +1453,15 @@ body::after {
       if (typeof data.music_level === 'number') state.musicLevel = data.music_level;
       if (typeof data.tones_level === 'number') state.tonesLevel = data.tones_level;
       updateUI();
-    }).catch(function() {});
+      // Backend recovered while user was connected: restart audio stream
+      if (wasDown && state.connected && !reconnectTimer && (!audio || audio.paused)) {
+        backoffMs = BACKOFF_INITIAL;
+        createAudio();
+        audio.play().catch(function() { startReconnect(); });
+      }
+    }).catch(function() {
+      backendUp = false;
+    });
   }
 
   setInterval(fetchNowPlaying, NP_POLL_INTERVAL);
