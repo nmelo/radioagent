@@ -13,6 +13,9 @@ from brain import (
     AnnouncementRateLimiter,
     AnnounceRequest,
     QueuedAnnouncement,
+    VoiceLevelRequest,
+    VOICE_LEVELS,
+    DEFAULT_VOICE_LEVEL,
     validate_wav,
     process_announcement,
     create_app,
@@ -400,6 +403,51 @@ class TestApp:
             "Access-Control-Request-Method": "GET",
         })
         assert resp.headers.get("access-control-allow-origin") == "*"
+
+    def test_voice_level_valid(self, client):
+        """POST /voice-level with valid levels 1-5 returns ok."""
+        with patch("brain.query_liquidsoap", return_value="OK"):
+            for level in range(1, 6):
+                resp = client.post("/voice-level", json={"level": level})
+                assert resp.status_code == 200
+                data = resp.json()
+                assert data["status"] == "ok"
+                assert data["level"] == level
+                assert "voice_volume" in data
+
+    def test_voice_level_out_of_range(self, client):
+        """POST /voice-level rejects levels outside 1-5."""
+        resp = client.post("/voice-level", json={"level": 0})
+        assert resp.status_code == 422
+        resp = client.post("/voice-level", json={"level": 6})
+        assert resp.status_code == 422
+        resp = client.post("/voice-level", json={"level": -1})
+        assert resp.status_code == 422
+
+    def test_voice_level_missing(self, client):
+        """POST /voice-level without level field returns 422."""
+        resp = client.post("/voice-level", json={})
+        assert resp.status_code == 422
+
+    def test_voice_level_in_now_playing(self, client):
+        """voice_level appears in /now-playing response."""
+        resp = client.get("/now-playing")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["voice_level"] == 4  # default
+
+    def test_voice_level_persists_in_now_playing(self, client):
+        """After setting voice level, /now-playing reflects the new value."""
+        with patch("brain.query_liquidsoap", return_value="OK"):
+            client.post("/voice-level", json={"level": 2})
+        resp = client.get("/now-playing")
+        assert resp.json()["voice_level"] == 2
+
+    def test_voice_level_liquidsoap_unavailable(self, client):
+        """POST /voice-level returns 503 when Liquidsoap is unreachable."""
+        with patch("brain.query_liquidsoap", return_value=None):
+            resp = client.post("/voice-level", json={"level": 3})
+            assert resp.status_code == 503
 
 
 # --- Liquidsoap metadata ---

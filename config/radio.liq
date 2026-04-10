@@ -64,6 +64,10 @@ music = blank.detect(
 
 # --- Voice announcement queue ---
 voice = request.queue(id="voice")
+# User-controlled voice volume (0.0-1.0 via socket: var.set voice_volume = 0.85)
+# Default 0.85 = level 4 "Loud", preserving approximate pre-existing behavior
+voice_volume = interactive.float("voice_volume", 0.85)
+voice = amplify(voice_volume, voice)
 voice = amplify(3.5, voice)
 
 # --- Ambient tones queue ---

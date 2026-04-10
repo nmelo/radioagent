@@ -86,6 +86,22 @@ def get_voice_for_kind(kind: str, default_voice: str) -> str:
 # --- Data models ---
 
 
+# Level -> Liquidsoap voice_volume float (multiplied by fixed 3.5x base amp)
+VOICE_LEVELS = {1: 0.3, 2: 0.5, 3: 0.7, 4: 0.85, 5: 1.0}
+DEFAULT_VOICE_LEVEL = 4
+
+
+class VoiceLevelRequest(BaseModel):
+    level: int
+
+    @field_validator("level")
+    @classmethod
+    def level_in_range(cls, v: int) -> int:
+        if v < 1 or v > 5:
+            raise ValueError("level must be between 1 and 5")
+        return v
+
+
 class AnnounceRequest(BaseModel):
     detail: str
     kind: str = "custom"
@@ -467,6 +483,7 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
     music_muted = False
     announcements_muted = False
     tones_muted = False
+    voice_level = DEFAULT_VOICE_LEVEL
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -559,6 +576,7 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         data["muted"] = music_muted
         data["announcements_muted"] = announcements_muted
         data["tones_muted"] = tones_muted
+        data["voice_level"] = voice_level
         data["next"] = get_next_track(config.liquidsoap_socket)
         data["music_dir"] = str(config.music_dir)
         return data
@@ -627,6 +645,18 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         logger.info("Tones unmuted")
         _broadcast_sse(sse_clients, "tones-mute", {"muted": False})
         return {"status": "ok", "muted": False}
+
+    @app.post("/voice-level")
+    def set_voice_level(req: VoiceLevelRequest):
+        nonlocal voice_level
+        vol = VOICE_LEVELS[req.level]
+        result = query_liquidsoap(config.liquidsoap_socket, f"var.set voice_volume = {vol}")
+        if result is None:
+            return JSONResponse(status_code=503, content={"status": "error", "message": "Liquidsoap unavailable"})
+        voice_level = req.level
+        logger.info("Voice level set to %d (voice_volume=%.2f)", req.level, vol)
+        _broadcast_sse(sse_clients, "voice-level", {"level": req.level})
+        return {"status": "ok", "level": req.level, "voice_volume": vol}
 
     @app.get("/events")
     async def events(request: Request):

@@ -606,6 +606,32 @@ body::after {
   margin-top: 6px;
 }
 
+.voice-level {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  margin-top: 8px;
+  height: 20px;
+}
+.voice-level-bar {
+  width: 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  background: var(--text-dim);
+  opacity: 0.25;
+  transition: background 0.2s, opacity 0.2s;
+}
+.voice-level-bar:hover { opacity: 0.6; }
+.voice-level-bar.lit {
+  background: var(--amber);
+  opacity: 1;
+}
+.voice-level.disabled .voice-level-bar {
+  background: var(--text-dim);
+  opacity: 0.15;
+  cursor: default;
+}
+
 /* --- Header Links --- */
 
 .footer-link {
@@ -840,6 +866,13 @@ body::after {
           <button class="channel-toggle" id="voiceToggle" aria-label="Toggle announcements"></button>
         </div>
         <div class="text-only-indicator" id="textOnlyIndicator" style="display:none">text only</div>
+        <div class="voice-level" id="voiceLevelBars" aria-label="Voice volume level">
+          <div class="voice-level-bar" data-level="1" style="height:20%"></div>
+          <div class="voice-level-bar" data-level="2" style="height:40%"></div>
+          <div class="voice-level-bar" data-level="3" style="height:60%"></div>
+          <div class="voice-level-bar" data-level="4" style="height:80%"></div>
+          <div class="voice-level-bar" data-level="5" style="height:100%"></div>
+        </div>
       </div>
       <div class="channel">
         <div class="channel-label" id="tonesLabel">TONES</div>
@@ -930,6 +963,7 @@ body::after {
   var textOnlyIndicator = document.getElementById('textOnlyIndicator');
   var tonesToggle = document.getElementById('tonesToggle');
   var tonesLabel = document.getElementById('tonesLabel');
+  var voiceLevelBars = document.getElementById('voiceLevelBars');
 
   // Static SVG icon markup (no user content ever flows into these)
   var ICON_PAUSE = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" fill="currentColor"/><rect x="14" y="4" width="4" height="16" fill="currentColor"/></svg>';
@@ -964,7 +998,8 @@ body::after {
     connected: false,
     musicPlaying: true,
     announcementsOn: true,
-    tonesOn: true
+    tonesOn: true,
+    voiceLevel: 4
   };
 
   // --- Audio ---
@@ -1128,11 +1163,35 @@ body::after {
     });
   }
 
+  function setVoiceLevel(level) {
+    if (!state.connected) return;
+    fetch('/voice-level', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level: level })
+    }).then(function(r) {
+      return r.json();
+    }).then(function(data) {
+      if (data.level) {
+        state.voiceLevel = data.level;
+        updateUI();
+      }
+    }).catch(function() {});
+  }
+
+  voiceLevelBars.addEventListener('click', function(e) {
+    var bar = e.target.closest('.voice-level-bar');
+    if (!bar) return;
+    var level = parseInt(bar.dataset.level, 10);
+    if (level >= 1 && level <= 5) setVoiceLevel(level);
+  });
+
   function syncServerState() {
     fetch('/now-playing').then(function(r) { return r.json(); }).then(function(data) {
       if (typeof data.muted === 'boolean') state.musicPlaying = !data.muted;
       if (typeof data.announcements_muted === 'boolean') state.announcementsOn = !data.announcements_muted;
       if (typeof data.tones_muted === 'boolean') state.tonesOn = !data.tones_muted;
+      if (typeof data.voice_level === 'number') state.voiceLevel = data.voice_level;
       updateNowPlaying(data);
       updateUI();
     }).catch(function() {});
@@ -1182,6 +1241,14 @@ body::after {
     voiceToggle.classList.toggle('voice-off', !state.announcementsOn);
     voiceToggle.setAttribute('aria-label', state.announcementsOn ? 'Mute announcements' : 'Unmute announcements');
     textOnlyIndicator.style.display = (!state.connected || state.announcementsOn) ? 'none' : '';
+
+    // Voice level bars
+    var bars = voiceLevelBars.querySelectorAll('.voice-level-bar');
+    var dimBars = !state.connected || !state.announcementsOn;
+    voiceLevelBars.classList.toggle('disabled', dimBars);
+    for (var i = 0; i < bars.length; i++) {
+      bars[i].classList.toggle('lit', !dimBars && (i + 1) <= state.voiceLevel);
+    }
 
     // Tones channel
     tonesLabel.style.color = (!state.connected || !state.tonesOn) ? 'var(--text-dim)' : '';
@@ -1262,6 +1329,7 @@ body::after {
       if (typeof data.muted === 'boolean') state.musicPlaying = !data.muted;
       if (typeof data.announcements_muted === 'boolean') state.announcementsOn = !data.announcements_muted;
       if (typeof data.tones_muted === 'boolean') state.tonesOn = !data.tones_muted;
+      if (typeof data.voice_level === 'number') state.voiceLevel = data.voice_level;
       updateUI();
     }).catch(function() {});
   }
@@ -1427,6 +1495,16 @@ body::after {
         var data = JSON.parse(e.data);
         if (typeof data.muted === 'boolean') {
           state.tonesOn = !data.muted;
+          updateUI();
+        }
+      } catch(err) {}
+    });
+
+    es.addEventListener('voice-level', function(e) {
+      try {
+        var data = JSON.parse(e.data);
+        if (typeof data.level === 'number') {
+          state.voiceLevel = data.level;
           updateUI();
         }
       } catch(err) {}
