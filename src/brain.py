@@ -539,12 +539,14 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
             return FileResponse(ico_path, media_type="image/x-icon")
         return JSONResponse(status_code=404, content={"error": "favicon.ico not found"})
 
-    @app.get("/assets/apple-touch-icon.png")
-    def apple_touch_icon():
+    def _serve_apple_touch_icon():
         icon_path = Path(__file__).parent / "assets" / "apple-touch-icon.png"
         if icon_path.exists():
             return FileResponse(icon_path, media_type="image/png")
         return JSONResponse(status_code=404, content={"error": "apple-touch-icon.png not found"})
+
+    app.get("/assets/apple-touch-icon.png")(_serve_apple_touch_icon)
+    app.get("/apple-touch-icon.png")(_serve_apple_touch_icon)
 
     @app.get("/skill/dj.skill")
     def download_dj_skill():
