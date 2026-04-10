@@ -90,7 +90,7 @@ def get_voice_for_kind(kind: str, default_voice: str) -> str:
 VOICE_LEVELS = {1: 0.3, 2: 0.5, 3: 0.7, 4: 0.85, 5: 1.0}
 DEFAULT_VOICE_LEVEL = 4
 
-MUSIC_LEVELS = {1: 0.12, 2: 0.19, 3: 0.4, 4: 0.56, 5: 0.8}
+MUSIC_LEVELS = {1: 0.05, 2: 0.19, 3: 0.4, 4: 0.56, 5: 0.8}
 DEFAULT_MUSIC_LEVEL = 2
 
 TONES_LEVELS = {1: 0.3, 2: 0.5, 3: 0.7, 4: 0.85, 5: 1.0}
