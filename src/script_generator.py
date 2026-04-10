@@ -19,6 +19,7 @@ class WebhookEvent:
     detail: str = ""
     kind: str = ""
     agent: str = ""
+    project: str = ""
 
 
 # Regex patterns for clean_text
@@ -82,6 +83,46 @@ def truncate_words(text: str, max_words: int) -> str:
     return " ".join(words[:max_words])
 
 
+def clean_project_name(project: str) -> str:
+    """Clean a project slug for TTS: strip hyphens/underscores, title case.
+
+    'agent-radio' -> 'Agent Radio', 'homelab' -> 'Homelab'
+    """
+    if not project:
+        return ""
+    return project.replace("-", " ").replace("_", " ").title()
+
+
+# Rotating natural framings for project context in announcements.
+# Index is selected by hashing the detail text so the same event
+# always gets the same framing, but different events vary.
+_PROJECT_FRAMINGS_COMPLETED = [
+    "Over at {project}, completed: {detail}",
+    "{project} just shipped: {detail}",
+    "On the {project} side, done: {detail}",
+]
+_PROJECT_FRAMINGS_FAILED = [
+    "Heads up, failure at {project}: {detail}",
+    "Over at {project}, something failed: {detail}",
+    "{project} hit a failure: {detail}",
+]
+_PROJECT_FRAMINGS_STUCK = [
+    "Something is stuck at {project}. {detail}",
+    "Over at {project}, something is stuck. {detail}",
+    "{project} is stuck. {detail}",
+]
+_PROJECT_FRAMINGS_DEFAULT = [
+    "Over at {project}: {detail}",
+    "{project}: {detail}",
+    "On the {project} side: {detail}",
+]
+
+
+def _pick_framing(framings: list[str], detail: str) -> str:
+    """Deterministically pick a framing based on detail text hash."""
+    return framings[hash(detail) % len(framings)]
+
+
 def is_suppressed(kind: str, suppress_kinds: list[str]) -> bool:
     """Check if an event kind matches any suppression glob pattern."""
     for pattern in suppress_kinds:
@@ -114,9 +155,10 @@ def generate_script(
     if kind and is_suppressed(kind, suppress_kinds):
         return None
 
-    # Clean and truncate the detail text
-    detail = truncate_words(clean_text(event.detail), max_words)
+    # Clean the detail text (truncation applied after template to account for project words)
+    detail = clean_text(event.detail)
     agent = event.agent.strip() if event.agent else ""
+    project = clean_project_name(event.project) if event.project else ""
 
     # Empty kind treated as default
     if not kind:
@@ -126,19 +168,47 @@ def generate_script(
     # Agent name is preserved in the webhook JSON/SSE event data but
     # excluded from the spoken text to avoid robotic-sounding prefixes.
     if kind.endswith(".completed"):
-        return f"Completed: {detail}" if detail else "Completed"
+        if not detail:
+            text = "Completed"
+        elif project:
+            text = _pick_framing(_PROJECT_FRAMINGS_COMPLETED, detail).format(
+                project=project, detail=detail)
+        else:
+            text = f"Completed: {detail}"
 
-    if kind.endswith(".failed"):
-        return f"Heads up, failure: {detail}" if detail else "Failure reported"
+    elif kind.endswith(".failed"):
+        if not detail:
+            text = "Failure reported"
+        elif project:
+            text = _pick_framing(_PROJECT_FRAMINGS_FAILED, detail).format(
+                project=project, detail=detail)
+        else:
+            text = f"Heads up, failure: {detail}"
 
-    if kind.endswith(".stuck"):
-        return f"Something is stuck. {detail}" if detail else "Something is stuck"
+    elif kind.endswith(".stuck"):
+        if not detail:
+            text = "Something is stuck"
+        elif project:
+            text = _pick_framing(_PROJECT_FRAMINGS_STUCK, detail).format(
+                project=project, detail=detail)
+        else:
+            text = f"Something is stuck. {detail}"
 
-    if kind.endswith(".started"):
-        return "Work started"
+    elif kind.endswith(".started"):
+        text = "Work started"
 
-    if kind.endswith(".stopped"):
-        return "Work stopped"
+    elif kind.endswith(".stopped"):
+        text = "Work stopped"
 
-    # Default: detail verbatim (cleaned and truncated)
-    return detail if detail else None
+    elif detail:
+        # Default: detail with optional project framing
+        if project:
+            text = _pick_framing(_PROJECT_FRAMINGS_DEFAULT, detail).format(
+                project=project, detail=detail)
+        else:
+            text = detail
+    else:
+        return None
+
+    # Truncate after template so the word count includes project name words
+    return truncate_words(text, max_words)

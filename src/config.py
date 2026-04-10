@@ -48,6 +48,19 @@ class RadioConfig:
     suppress_kinds: list[str] = field(default_factory=lambda: ["*.idle", "*.message"])
     max_announcement_words: int = 40
 
+    # Per-project voice casting (project name -> Kokoro voice ID)
+    project_voices: dict[str, str] = field(default_factory=dict)
+
+    def get_project_voice(self, project: str) -> str | None:
+        """Return the voice for a project, or None if no mapping exists."""
+        if not project:
+            return None
+        return self.project_voices.get(project) or self.project_voices.get("_default")
+
+    def collect_extra_voices(self) -> list[str]:
+        """Return unique voices from project_voices for TTS warmup."""
+        return list(set(self.project_voices.values()))
+
 
 def _validate_port(value: int, name: str) -> None:
     if not (1 <= value <= 65535):

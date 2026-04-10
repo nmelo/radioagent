@@ -4,6 +4,7 @@ import pytest
 
 from script_generator import (
     WebhookEvent,
+    clean_project_name,
     clean_text,
     generate_script,
     is_suppressed,
@@ -254,3 +255,81 @@ class TestGenerateScriptIntegration:
         event = WebhookEvent(kind="agent.idle", detail="**nothing** happening")
         result = generate_script(event, suppress_kinds=["*.idle"])
         assert result is None
+
+
+# --- clean_project_name ---
+
+
+class TestCleanProjectName:
+    def test_hyphenated(self):
+        assert clean_project_name("agent-radio") == "Agent Radio"
+
+    def test_underscored(self):
+        assert clean_project_name("my_project") == "My Project"
+
+    def test_simple(self):
+        assert clean_project_name("homelab") == "Homelab"
+
+    def test_empty(self):
+        assert clean_project_name("") == ""
+
+    def test_mixed(self):
+        assert clean_project_name("cool-web_app") == "Cool Web App"
+
+
+# --- Project-aware templates ---
+
+
+class TestProjectTemplates:
+    def test_completed_with_project_contains_project(self):
+        event = WebhookEvent(kind="task.completed", detail="auth refactor", project="homelab")
+        result = generate_script(event)
+        assert "Homelab" in result
+        assert "auth refactor" in result
+
+    def test_completed_without_project_unchanged(self):
+        event = WebhookEvent(kind="task.completed", detail="auth refactor")
+        result = generate_script(event)
+        assert result == "Completed: auth refactor"
+
+    def test_failed_with_project_contains_project(self):
+        event = WebhookEvent(kind="build.failed", detail="tests broken", project="agent-radio")
+        result = generate_script(event)
+        assert "Agent Radio" in result
+        assert "tests broken" in result
+
+    def test_stuck_with_project_contains_project(self):
+        event = WebhookEvent(kind="agent.stuck", detail="waiting on API", project="homelab")
+        result = generate_script(event)
+        assert "Homelab" in result
+        assert "waiting on API" in result
+
+    def test_default_with_project_contains_project(self):
+        event = WebhookEvent(kind="custom", detail="deploy finished", project="homelab")
+        result = generate_script(event)
+        assert "Homelab" in result
+        assert "deploy finished" in result
+
+    def test_no_project_no_change(self):
+        """Events without project field produce same output as before."""
+        event = WebhookEvent(kind="task.completed", detail="auth refactor")
+        assert generate_script(event) == "Completed: auth refactor"
+
+    def test_started_ignores_project(self):
+        """Tone-only events don't get project framing."""
+        event = WebhookEvent(kind="agent.started", project="homelab")
+        assert generate_script(event) == "Work started"
+
+    def test_word_count_includes_project(self):
+        """Max word count applies to combined text including project name."""
+        long_detail = " ".join(f"word{i}" for i in range(50))
+        event = WebhookEvent(kind="custom", detail=long_detail, project="homelab")
+        result = generate_script(event, max_words=10)
+        assert len(result.split()) == 10
+
+    def test_deterministic_framing(self):
+        """Same event always gets the same framing."""
+        event = WebhookEvent(kind="task.completed", detail="auth refactor", project="homelab")
+        r1 = generate_script(event)
+        r2 = generate_script(event)
+        assert r1 == r2

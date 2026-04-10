@@ -688,7 +688,8 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
 
     @app.post("/announce")
     def announce(req: AnnounceRequest):
-        event = WebhookEvent(detail=req.detail, kind=req.kind, agent=req.agent)
+        event = WebhookEvent(detail=req.detail, kind=req.kind, agent=req.agent,
+                             project=req.project)
 
         # --- Tone routing (independent of voice) ---
         tone_name = get_tone_for_kind(req.kind)
@@ -722,6 +723,8 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
             "kind": req.kind,
             "timestamp": datetime.now().isoformat(),
         }
+        if req.project:
+            record["project"] = req.project
         if tone_name:
             record["tone"] = tone_name
         announcement_history.appendleft(record)
@@ -737,7 +740,9 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
             return {"status": "muted"}
 
         # Voice pipeline: TTS -> validate -> push
-        voice = get_voice_for_kind(req.kind, config.tts_voice)
+        # Priority: failure voice > project voice > default voice
+        default_voice = config.get_project_voice(req.project) or config.tts_voice
+        voice = get_voice_for_kind(req.kind, default_voice)
         entry = QueuedAnnouncement(
             text=script,
             kind=req.kind,
@@ -768,8 +773,9 @@ def main():
     )
 
     config = load_config(PROJECT_ROOT / "config.yaml")
+    extra_voices = [FAILURE_VOICE] + config.collect_extra_voices()
     tts = KokoroEngine(voice=config.tts_voice, speed=config.tts_speed,
-                       extra_voices=[FAILURE_VOICE])
+                       extra_voices=extra_voices)
     app = create_app(config, tts)
 
     uv_config = uvicorn.Config(

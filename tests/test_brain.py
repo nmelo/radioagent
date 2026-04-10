@@ -449,6 +449,99 @@ class TestApp:
             resp = client.post("/voice-level", json={"level": 3})
             assert resp.status_code == 503
 
+    def test_project_in_sse_record(self, client):
+        """Announcement with project includes it in recent-announcements."""
+        # Use agent.started (tone-only) to avoid TTS pipeline
+        client.post("/announce", json={
+            "detail": "picking up config", "kind": "agent.started", "project": "homelab"
+        })
+        resp = client.get("/recent-announcements")
+        data = resp.json()
+        assert len(data) > 0
+        assert data[0]["project"] == "homelab"
+
+    def test_no_project_no_field_in_record(self, client):
+        """Announcement without project omits the field from recent-announcements."""
+        client.post("/announce", json={
+            "detail": "picking up config", "kind": "agent.started"
+        })
+        resp = client.get("/recent-announcements")
+        data = resp.json()
+        assert len(data) > 0
+        assert "project" not in data[0]
+
+
+class TestProjectVoice:
+    """Test per-project voice selection in create_app."""
+
+    @pytest.fixture
+    def project_client(self, tmp_path):
+        from fastapi.testclient import TestClient
+        from config import RadioConfig
+        music = tmp_path / "music"
+        music.mkdir()
+        (music / "t.mp3").write_bytes(b"fake")
+        config = RadioConfig(
+            music_dir=music,
+            liquidsoap_socket=Path(tmp_path / "test.sock"),
+            webhook_port=8001,
+            icecast_password="test",
+            tts_voice="af_heart",
+            project_voices={"homelab": "am_adam", "_default": "af_sky"},
+        )
+        mock_tts = MagicMock()
+        mock_tts.name = "mock"
+        def fake_render(text, output_path, voice=None):
+            make_wav(output_path, duration=2.0)
+            return True
+        mock_tts.render.side_effect = fake_render
+
+        with patch("brain.push_to_liquidsoap", return_value=True), \
+             patch("brain._schedule_wav_cleanup"):
+            app = create_app(config, mock_tts)
+            yield TestClient(app), mock_tts
+
+    def test_project_voice_used(self, project_client):
+        """Homelab project should use am_adam voice."""
+        client, mock_tts = project_client
+        client.post("/announce", json={
+            "detail": "deploy done", "kind": "agent.completed", "project": "homelab"
+        })
+        # Check the voice argument passed to TTS render
+        call_args = mock_tts.render.call_args
+        assert call_args is not None
+        assert call_args.kwargs.get("voice") == "am_adam"
+
+    def test_unknown_project_uses_default_mapping(self, project_client):
+        """Unknown project falls back to _default in project_voices."""
+        client, mock_tts = project_client
+        client.post("/announce", json={
+            "detail": "deploy done", "kind": "agent.completed", "project": "unknown-proj"
+        })
+        call_args = mock_tts.render.call_args
+        assert call_args is not None
+        assert call_args.kwargs.get("voice") == "af_sky"
+
+    def test_failure_overrides_project_voice(self, project_client):
+        """Failure voice (am_michael) overrides project voice."""
+        client, mock_tts = project_client
+        client.post("/announce", json={
+            "detail": "build broke", "kind": "build.failed", "project": "homelab"
+        })
+        call_args = mock_tts.render.call_args
+        assert call_args is not None
+        assert call_args.kwargs.get("voice") == "am_michael"
+
+    def test_no_project_uses_tts_voice(self, project_client):
+        """No project field uses config.tts_voice."""
+        client, mock_tts = project_client
+        client.post("/announce", json={
+            "detail": "deploy done", "kind": "agent.completed"
+        })
+        call_args = mock_tts.render.call_args
+        assert call_args is not None
+        assert call_args.kwargs.get("voice") == "af_heart"
+
 
 # --- Liquidsoap metadata ---
 

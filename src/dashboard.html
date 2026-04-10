@@ -359,6 +359,19 @@ body::after {
   margin-top: 4px;
 }
 
+.wire-project-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-right: 6px;
+  vertical-align: middle;
+  opacity: 0.9;
+}
+
 .wire-empty {
   font-family: var(--font-mono);
   font-size: 0.8rem;
@@ -992,6 +1005,25 @@ body::after {
     return '';
   }
 
+  // Project pill colors: muted palette that works on dark backgrounds
+  var PROJECT_COLORS = [
+    { bg: 'rgba(232,163,23,0.15)', fg: '#E8A317' },
+    { bg: 'rgba(34,211,238,0.15)', fg: '#22D3EE' },
+    { bg: 'rgba(168,85,247,0.15)', fg: '#A855F7' },
+    { bg: 'rgba(34,197,94,0.15)', fg: '#22C55E' },
+    { bg: 'rgba(251,146,60,0.15)', fg: '#FB923C' },
+    { bg: 'rgba(244,114,182,0.15)', fg: '#F472B6' },
+    { bg: 'rgba(96,165,250,0.15)', fg: '#60A5FA' },
+    { bg: 'rgba(163,230,53,0.15)', fg: '#A3E635' },
+  ];
+
+  function projectColor(name) {
+    if (!name) return null;
+    var h = 0;
+    for (var i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+    return PROJECT_COLORS[Math.abs(h) % PROJECT_COLORS.length];
+  }
+
   // --- State Machine ---
 
   var state = {
@@ -1358,6 +1390,15 @@ body::after {
 
     var textEl = document.createElement('div');
     textEl.className = 'wire-item-text';
+    // Project pill tag (if present)
+    if (announcement.project) {
+      var tag = document.createElement('span');
+      tag.className = 'wire-project-tag';
+      tag.textContent = announcement.project;
+      var c = projectColor(announcement.project);
+      if (c) { tag.style.background = c.bg; tag.style.color = c.fg; }
+      textEl.appendChild(tag);
+    }
     item.appendChild(textEl);
 
     var timeEl = document.createElement('div');
