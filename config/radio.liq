@@ -45,9 +45,10 @@ music = audio_to_stereo(music)
 # Crossfade between tracks (reduced from 5s to 3s to limit stall window)
 music = crossfade(duration=3.0, music)
 
-# Music volume control (mute/unmute via socket: var.set music_volume = 0.0/1.0)
+# Music volume control (0.0-1.0 via socket: var.set music_volume = X)
+# Default 0.3 = level 2, moderate background level
 # Placed after blank.skip and crossfade so muting doesn't trigger skip logic
-music_volume = interactive.float("music_volume", 0.7)
+music_volume = interactive.float("music_volume", 0.3)
 music = amplify(music_volume, music)
 
 # Safety net: generate silence if source fails completely
@@ -72,6 +73,10 @@ voice = amplify(3.5, voice)
 
 # --- Ambient tones queue ---
 tones = request.queue(id="tones")
+# User-controlled tones volume (0.0-1.0 via socket: var.set tones_volume = X)
+# Default 0.7 = level 3 "Normal"
+tones_volume = interactive.float("tones_volume", 0.7)
+tones = amplify(tones_volume, tones)
 tones = amplify(2.0, tones)
 
 # --- Mix: duck music under tones, then duck combined under voice ---

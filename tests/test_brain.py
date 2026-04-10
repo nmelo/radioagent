@@ -12,10 +12,15 @@ import pytest
 from brain import (
     AnnouncementRateLimiter,
     AnnounceRequest,
+    ChannelLevelRequest,
     QueuedAnnouncement,
     VoiceLevelRequest,
     VOICE_LEVELS,
     DEFAULT_VOICE_LEVEL,
+    MUSIC_LEVELS,
+    DEFAULT_MUSIC_LEVEL,
+    TONES_LEVELS,
+    DEFAULT_TONES_LEVEL,
     validate_wav,
     process_announcement,
     create_app,
@@ -447,6 +452,70 @@ class TestApp:
         """POST /voice-level returns 503 when Liquidsoap is unreachable."""
         with patch("brain.query_liquidsoap", return_value=None):
             resp = client.post("/voice-level", json={"level": 3})
+            assert resp.status_code == 503
+
+    # --- Music level ---
+
+    def test_music_level_valid(self, client):
+        with patch("brain.query_liquidsoap", return_value="OK"):
+            for level in range(1, 6):
+                resp = client.post("/music-level", json={"level": level})
+                assert resp.status_code == 200
+                data = resp.json()
+                assert data["status"] == "ok"
+                assert data["level"] == level
+
+    def test_music_level_out_of_range(self, client):
+        resp = client.post("/music-level", json={"level": 0})
+        assert resp.status_code == 422
+        resp = client.post("/music-level", json={"level": 6})
+        assert resp.status_code == 422
+
+    def test_music_level_in_now_playing(self, client):
+        resp = client.get("/now-playing")
+        assert resp.json()["music_level"] == 2  # default
+
+    def test_music_level_persists(self, client):
+        with patch("brain.query_liquidsoap", return_value="OK"):
+            client.post("/music-level", json={"level": 4})
+        resp = client.get("/now-playing")
+        assert resp.json()["music_level"] == 4
+
+    def test_music_level_liquidsoap_unavailable(self, client):
+        with patch("brain.query_liquidsoap", return_value=None):
+            resp = client.post("/music-level", json={"level": 3})
+            assert resp.status_code == 503
+
+    # --- Tones level ---
+
+    def test_tones_level_valid(self, client):
+        with patch("brain.query_liquidsoap", return_value="OK"):
+            for level in range(1, 6):
+                resp = client.post("/tones-level", json={"level": level})
+                assert resp.status_code == 200
+                data = resp.json()
+                assert data["status"] == "ok"
+                assert data["level"] == level
+
+    def test_tones_level_out_of_range(self, client):
+        resp = client.post("/tones-level", json={"level": 0})
+        assert resp.status_code == 422
+        resp = client.post("/tones-level", json={"level": 6})
+        assert resp.status_code == 422
+
+    def test_tones_level_in_now_playing(self, client):
+        resp = client.get("/now-playing")
+        assert resp.json()["tones_level"] == 3  # default
+
+    def test_tones_level_persists(self, client):
+        with patch("brain.query_liquidsoap", return_value="OK"):
+            client.post("/tones-level", json={"level": 5})
+        resp = client.get("/now-playing")
+        assert resp.json()["tones_level"] == 5
+
+    def test_tones_level_liquidsoap_unavailable(self, client):
+        with patch("brain.query_liquidsoap", return_value=None):
+            resp = client.post("/tones-level", json={"level": 3})
             assert resp.status_code == 503
 
     def test_project_in_sse_record(self, client):

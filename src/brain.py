@@ -86,12 +86,18 @@ def get_voice_for_kind(kind: str, default_voice: str) -> str:
 # --- Data models ---
 
 
-# Level -> Liquidsoap voice_volume float (multiplied by fixed 3.5x base amp)
+# Level -> Liquidsoap interactive.float value (multiplied by channel's fixed base amp)
 VOICE_LEVELS = {1: 0.3, 2: 0.5, 3: 0.7, 4: 0.85, 5: 1.0}
 DEFAULT_VOICE_LEVEL = 4
 
+MUSIC_LEVELS = {1: 0.15, 2: 0.3, 3: 0.5, 4: 0.7, 5: 1.0}
+DEFAULT_MUSIC_LEVEL = 2
 
-class VoiceLevelRequest(BaseModel):
+TONES_LEVELS = {1: 0.3, 2: 0.5, 3: 0.7, 4: 0.85, 5: 1.0}
+DEFAULT_TONES_LEVEL = 3
+
+
+class ChannelLevelRequest(BaseModel):
     level: int
 
     @field_validator("level")
@@ -100,6 +106,10 @@ class VoiceLevelRequest(BaseModel):
         if v < 1 or v > 5:
             raise ValueError("level must be between 1 and 5")
         return v
+
+
+# Backwards compat alias
+VoiceLevelRequest = ChannelLevelRequest
 
 
 class AnnounceRequest(BaseModel):
@@ -484,6 +494,8 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
     announcements_muted = False
     tones_muted = False
     voice_level = DEFAULT_VOICE_LEVEL
+    music_level = DEFAULT_MUSIC_LEVEL
+    tones_level = DEFAULT_TONES_LEVEL
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -577,6 +589,8 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         data["announcements_muted"] = announcements_muted
         data["tones_muted"] = tones_muted
         data["voice_level"] = voice_level
+        data["music_level"] = music_level
+        data["tones_level"] = tones_level
         data["next"] = get_next_track(config.liquidsoap_socket)
         data["music_dir"] = str(config.music_dir)
         return data
@@ -606,11 +620,12 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
     @app.post("/unmute")
     def unmute_music():
         nonlocal music_muted
-        result = query_liquidsoap(config.liquidsoap_socket, "var.set music_volume = 1.0")
+        vol = MUSIC_LEVELS[music_level]
+        result = query_liquidsoap(config.liquidsoap_socket, f"var.set music_volume = {vol}")
         if result is None:
             return JSONResponse(status_code=503, content={"status": "error", "message": "Liquidsoap unavailable"})
         music_muted = False
-        logger.info("Music unmuted")
+        logger.info("Music unmuted (restored level %d, volume=%.2f)", music_level, vol)
         _broadcast_sse(sse_clients, "mute", {"muted": False})
         return {"status": "ok", "muted": False}
 
@@ -647,7 +662,7 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         return {"status": "ok", "muted": False}
 
     @app.post("/voice-level")
-    def set_voice_level(req: VoiceLevelRequest):
+    def set_voice_level(req: ChannelLevelRequest):
         nonlocal voice_level
         vol = VOICE_LEVELS[req.level]
         result = query_liquidsoap(config.liquidsoap_socket, f"var.set voice_volume = {vol}")
@@ -657,6 +672,30 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         logger.info("Voice level set to %d (voice_volume=%.2f)", req.level, vol)
         _broadcast_sse(sse_clients, "voice-level", {"level": req.level})
         return {"status": "ok", "level": req.level, "voice_volume": vol}
+
+    @app.post("/music-level")
+    def set_music_level(req: ChannelLevelRequest):
+        nonlocal music_level
+        vol = MUSIC_LEVELS[req.level]
+        result = query_liquidsoap(config.liquidsoap_socket, f"var.set music_volume = {vol}")
+        if result is None:
+            return JSONResponse(status_code=503, content={"status": "error", "message": "Liquidsoap unavailable"})
+        music_level = req.level
+        logger.info("Music level set to %d (music_volume=%.2f)", req.level, vol)
+        _broadcast_sse(sse_clients, "music-level", {"level": req.level})
+        return {"status": "ok", "level": req.level, "music_volume": vol}
+
+    @app.post("/tones-level")
+    def set_tones_level(req: ChannelLevelRequest):
+        nonlocal tones_level
+        vol = TONES_LEVELS[req.level]
+        result = query_liquidsoap(config.liquidsoap_socket, f"var.set tones_volume = {vol}")
+        if result is None:
+            return JSONResponse(status_code=503, content={"status": "error", "message": "Liquidsoap unavailable"})
+        tones_level = req.level
+        logger.info("Tones level set to %d (tones_volume=%.2f)", req.level, vol)
+        _broadcast_sse(sse_clients, "tones-level", {"level": req.level})
+        return {"status": "ok", "level": req.level, "tones_volume": vol}
 
     @app.get("/events")
     async def events(request: Request):

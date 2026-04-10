@@ -872,6 +872,13 @@ body::after {
           <button class="channel-toggle" id="musicToggle" aria-label="Toggle music"></button>
           <button class="skip-btn" id="skipBtn" aria-label="Skip track">&gt;&gt;</button>
         </div>
+        <div class="voice-level" id="musicLevelBars" aria-label="Music volume level">
+          <div class="voice-level-bar" data-level="1" style="height:20%"></div>
+          <div class="voice-level-bar" data-level="2" style="height:40%"></div>
+          <div class="voice-level-bar" data-level="3" style="height:60%"></div>
+          <div class="voice-level-bar" data-level="4" style="height:80%"></div>
+          <div class="voice-level-bar" data-level="5" style="height:100%"></div>
+        </div>
       </div>
       <div class="channel">
         <div class="channel-label" id="voiceLabel">VOICE</div>
@@ -892,6 +899,13 @@ body::after {
         <div class="channel-controls">
           <button class="channel-toggle" id="tonesToggle" aria-label="Toggle tones"></button>
           <button class="help-btn" id="tonesHelpBtn" aria-label="About Tones">?</button>
+        </div>
+        <div class="voice-level" id="tonesLevelBars" aria-label="Tones volume level">
+          <div class="voice-level-bar" data-level="1" style="height:20%"></div>
+          <div class="voice-level-bar" data-level="2" style="height:40%"></div>
+          <div class="voice-level-bar" data-level="3" style="height:60%"></div>
+          <div class="voice-level-bar" data-level="4" style="height:80%"></div>
+          <div class="voice-level-bar" data-level="5" style="height:100%"></div>
         </div>
       </div>
     </div>
@@ -977,6 +991,8 @@ body::after {
   var tonesToggle = document.getElementById('tonesToggle');
   var tonesLabel = document.getElementById('tonesLabel');
   var voiceLevelBars = document.getElementById('voiceLevelBars');
+  var musicLevelBars = document.getElementById('musicLevelBars');
+  var tonesLevelBars = document.getElementById('tonesLevelBars');
 
   // Static SVG icon markup (no user content ever flows into these)
   var ICON_PAUSE = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" fill="currentColor"/><rect x="14" y="4" width="4" height="16" fill="currentColor"/></svg>';
@@ -1031,7 +1047,9 @@ body::after {
     musicPlaying: true,
     announcementsOn: true,
     tonesOn: true,
-    voiceLevel: 4
+    voiceLevel: 4,
+    musicLevel: 2,
+    tonesLevel: 3
   };
 
   // --- Audio ---
@@ -1218,12 +1236,60 @@ body::after {
     if (level >= 1 && level <= 5) setVoiceLevel(level);
   });
 
+  function setMusicLevel(level) {
+    if (!state.connected) return;
+    fetch('/music-level', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level: level })
+    }).then(function(r) {
+      return r.json();
+    }).then(function(data) {
+      if (data.level) {
+        state.musicLevel = data.level;
+        updateUI();
+      }
+    }).catch(function() {});
+  }
+
+  musicLevelBars.addEventListener('click', function(e) {
+    var bar = e.target.closest('.voice-level-bar');
+    if (!bar) return;
+    var level = parseInt(bar.dataset.level, 10);
+    if (level >= 1 && level <= 5) setMusicLevel(level);
+  });
+
+  function setTonesLevel(level) {
+    if (!state.connected) return;
+    fetch('/tones-level', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level: level })
+    }).then(function(r) {
+      return r.json();
+    }).then(function(data) {
+      if (data.level) {
+        state.tonesLevel = data.level;
+        updateUI();
+      }
+    }).catch(function() {});
+  }
+
+  tonesLevelBars.addEventListener('click', function(e) {
+    var bar = e.target.closest('.voice-level-bar');
+    if (!bar) return;
+    var level = parseInt(bar.dataset.level, 10);
+    if (level >= 1 && level <= 5) setTonesLevel(level);
+  });
+
   function syncServerState() {
     fetch('/now-playing').then(function(r) { return r.json(); }).then(function(data) {
       if (typeof data.muted === 'boolean') state.musicPlaying = !data.muted;
       if (typeof data.announcements_muted === 'boolean') state.announcementsOn = !data.announcements_muted;
       if (typeof data.tones_muted === 'boolean') state.tonesOn = !data.tones_muted;
       if (typeof data.voice_level === 'number') state.voiceLevel = data.voice_level;
+      if (typeof data.music_level === 'number') state.musicLevel = data.music_level;
+      if (typeof data.tones_level === 'number') state.tonesLevel = data.tones_level;
       updateNowPlaying(data);
       updateUI();
     }).catch(function() {});
@@ -1265,6 +1331,14 @@ body::after {
     musicToggle.classList.toggle('active', state.musicPlaying);
     musicToggle.setAttribute('aria-label', state.musicPlaying ? 'Pause music' : 'Play music');
 
+    // Music level bars
+    var mBars = musicLevelBars.querySelectorAll('.voice-level-bar');
+    var dimMusic = !state.connected || !state.musicPlaying;
+    musicLevelBars.classList.toggle('disabled', dimMusic);
+    for (var mi = 0; mi < mBars.length; mi++) {
+      mBars[mi].classList.toggle('lit', !dimMusic && (mi + 1) <= state.musicLevel);
+    }
+
     // Voice channel
     voiceLabel.style.color = (!state.connected || !state.announcementsOn) ? 'var(--text-dim)' : '';
     // Safe: only static SVG icon constants, no user content
@@ -1289,6 +1363,14 @@ body::after {
     tonesToggle.classList.toggle('tones-on', state.tonesOn);
     tonesToggle.classList.toggle('tones-off', !state.tonesOn);
     tonesToggle.setAttribute('aria-label', state.tonesOn ? 'Mute tones' : 'Unmute tones');
+
+    // Tones level bars
+    var tBars = tonesLevelBars.querySelectorAll('.voice-level-bar');
+    var dimTones = !state.connected || !state.tonesOn;
+    tonesLevelBars.classList.toggle('disabled', dimTones);
+    for (var ti = 0; ti < tBars.length; ti++) {
+      tBars[ti].classList.toggle('lit', !dimTones && (ti + 1) <= state.tonesLevel);
+    }
   }
 
   // --- Music Info Tooltip ---
@@ -1362,6 +1444,8 @@ body::after {
       if (typeof data.announcements_muted === 'boolean') state.announcementsOn = !data.announcements_muted;
       if (typeof data.tones_muted === 'boolean') state.tonesOn = !data.tones_muted;
       if (typeof data.voice_level === 'number') state.voiceLevel = data.voice_level;
+      if (typeof data.music_level === 'number') state.musicLevel = data.music_level;
+      if (typeof data.tones_level === 'number') state.tonesLevel = data.tones_level;
       updateUI();
     }).catch(function() {});
   }
@@ -1548,6 +1632,26 @@ body::after {
         var data = JSON.parse(e.data);
         if (typeof data.level === 'number') {
           state.voiceLevel = data.level;
+          updateUI();
+        }
+      } catch(err) {}
+    });
+
+    es.addEventListener('music-level', function(e) {
+      try {
+        var data = JSON.parse(e.data);
+        if (typeof data.level === 'number') {
+          state.musicLevel = data.level;
+          updateUI();
+        }
+      } catch(err) {}
+    });
+
+    es.addEventListener('tones-level', function(e) {
+      try {
+        var data = JSON.parse(e.data);
+        if (typeof data.level === 'number') {
+          state.tonesLevel = data.level;
           updateUI();
         }
       } catch(err) {}
