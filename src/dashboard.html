@@ -1052,6 +1052,46 @@ body::after {
     tonesLevel: 3
   };
 
+  // --- Volume persistence ---
+
+  var LS_KEY = 'ra_volumes';
+
+  function saveVolumes() {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({
+        master: parseInt(volumeSlider.value, 10),
+        musicLevel: state.musicLevel,
+        voiceLevel: state.voiceLevel,
+        tonesLevel: state.tonesLevel
+      }));
+    } catch(e) {}
+  }
+
+  function loadVolumes() {
+    try {
+      var raw = localStorage.getItem(LS_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch(e) { return null; }
+  }
+
+  // Restore saved values on load
+  var saved = loadVolumes();
+  if (saved) {
+    if (typeof saved.master === 'number') {
+      volumeSlider.value = saved.master;
+    }
+    if (typeof saved.voiceLevel === 'number' && saved.voiceLevel >= 1 && saved.voiceLevel <= 5) {
+      state.voiceLevel = saved.voiceLevel;
+    }
+    if (typeof saved.musicLevel === 'number' && saved.musicLevel >= 1 && saved.musicLevel <= 5) {
+      state.musicLevel = saved.musicLevel;
+    }
+    if (typeof saved.tonesLevel === 'number' && saved.tonesLevel >= 1 && saved.tonesLevel <= 5) {
+      state.tonesLevel = saved.tonesLevel;
+    }
+  }
+
   // --- Audio ---
 
   var audio = null;
@@ -1133,6 +1173,13 @@ body::after {
         connectBtn.innerHTML = ICON_CONNECT + ' CONNECT';
         connectBtn.disabled = false;
         syncServerState();
+        // Restore saved channel levels to server
+        var sv = loadVolumes();
+        if (sv) {
+          if (sv.musicLevel) setMusicLevel(sv.musicLevel);
+          if (sv.voiceLevel) setVoiceLevel(sv.voiceLevel);
+          if (sv.tonesLevel) setTonesLevel(sv.tonesLevel);
+        }
         updateUI();
       }, 3000);
     }).catch(function() {
@@ -1228,6 +1275,7 @@ body::after {
     }).then(function(data) {
       if (data.level) {
         state.voiceLevel = data.level;
+        saveVolumes();
         updateUI();
       }
     }).catch(function() {});
@@ -1251,6 +1299,7 @@ body::after {
     }).then(function(data) {
       if (data.level) {
         state.musicLevel = data.level;
+        saveVolumes();
         updateUI();
       }
     }).catch(function() {});
@@ -1274,6 +1323,7 @@ body::after {
     }).then(function(data) {
       if (data.level) {
         state.tonesLevel = data.level;
+        saveVolumes();
         updateUI();
       }
     }).catch(function() {});
@@ -1401,6 +1451,7 @@ body::after {
 
   volumeSlider.addEventListener('input', function() {
     if (audio) audio.volume = this.value / 100;
+    saveVolumes();
   });
 
   skipBtn.addEventListener('click', function() {
