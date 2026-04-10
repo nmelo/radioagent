@@ -47,7 +47,7 @@ music = crossfade(duration=3.0, music)
 
 # Music volume control (mute/unmute via socket: var.set music_volume = 0.0/1.0)
 # Placed after blank.skip and crossfade so muting doesn't trigger skip logic
-music_volume = interactive.float("music_volume", 1.0)
+music_volume = interactive.float("music_volume", 0.7)
 music = amplify(music_volume, music)
 
 # Safety net: generate silence if source fails completely
