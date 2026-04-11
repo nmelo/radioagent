@@ -518,6 +518,11 @@ class TestApp:
             resp = client.post("/tones-level", json={"level": 3})
             assert resp.status_code == 503
 
+    def test_next_track_no_playlist(self, client):
+        """GET /next-track returns 503 when no playlist manager."""
+        resp = client.get("/next-track")
+        assert resp.status_code == 503
+
     def test_project_in_sse_record(self, client):
         """Announcement with project includes it in recent-announcements."""
         # Use agent.started (tone-only) to avoid TTS pipeline

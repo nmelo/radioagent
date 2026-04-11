@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, field_validator
 
 from config import RadioConfig, load_config
+from playlist_manager import PlaylistManager
 from script_generator import WebhookEvent, generate_script
 from tts import TTSEngine
 from tts.kokoro_engine import KokoroEngine
@@ -482,7 +483,8 @@ def process_announcement(announcement: QueuedAnnouncement, tts: TTSEngine,
 # --- App factory ---
 
 
-def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
+def create_app(config: RadioConfig, tts: TTSEngine,
+               playlist: PlaylistManager | None = None) -> FastAPI:
     rate_limiter = AnnouncementRateLimiter(
         config.webhook_rate_limit, max_queue=10
     )
@@ -511,6 +513,9 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         logger.info("Shutting down, draining %d queued announcements...", len(rate_limiter.queue))
         drain_task.cancel()
         rate_limiter.drain_remaining()
+        # Stop playlist rescan timer
+        if playlist:
+            playlist.stop()
         # Close SSE clients
         for q in sse_clients:
             await q.put(None)
@@ -609,6 +614,19 @@ def create_app(config: RadioConfig, tts: TTSEngine) -> FastAPI:
         if result is not None:
             return {"status": "skipped"}
         return JSONResponse(status_code=503, content={"status": "error", "message": "Liquidsoap unavailable"})
+
+    @app.get("/next-track")
+    def next_track_endpoint():
+        """Return the next track path as plain text for Liquidsoap request.dynamic."""
+        if not playlist:
+            return JSONResponse(status_code=503, content={"error": "playlist manager not initialized"})
+        track = playlist.next_track()
+        if not track:
+            return JSONResponse(status_code=404, content={"error": "no tracks available"})
+        return StreamingResponse(
+            iter([str(track)]),
+            media_type="text/plain",
+        )
 
     @app.post("/mute")
     def mute_music():
@@ -819,7 +837,9 @@ def main():
     extra_voices = [FAILURE_VOICE] + config.collect_extra_voices()
     tts = KokoroEngine(voice=config.tts_voice, speed=config.tts_speed,
                        extra_voices=extra_voices)
-    app = create_app(config, tts)
+    playlist = PlaylistManager(config.music_dir)
+    logger.info("Playlist: %d tracks in %s", playlist.track_count, config.music_dir)
+    app = create_app(config, tts, playlist=playlist)
 
     uv_config = uvicorn.Config(
         app, host="0.0.0.0", port=config.webhook_port, log_level="info"

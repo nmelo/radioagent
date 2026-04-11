@@ -11,14 +11,13 @@ settings.server.socket := true
 settings.server.socket.path := environment.get(default="/tmp/agent-radio.sock", "LIQUIDSOAP_SOCKET_PATH")
 
 # --- Music source ---
-music_dir = environment.get(default="/opt/radioagent/music", "RADIO_MUSIC_DIR")
-music = playlist(
-  id="music",
-  music_dir,
-  mode="random",
-  reload_mode="watch",
-  prefetch=2
-)
+# Brain's /next-track endpoint manages selection with recency-penalized shuffle.
+# Liquidsoap requests the next track via curl; brain returns a file path.
+brain_port = environment.get(default="8001", "BRAIN_PORT")
+music = request.dynamic(id="music", {
+  result = process.read("curl -sf http://localhost:#{brain_port}/next-track")
+  request.create(result)
+})
 
 # Log track changes
 music = source.on_track(music, fun(m) -> begin
@@ -41,6 +40,9 @@ music = blank.skip(max_blank=5., threshold=-40., track_sensitive=true, music)
 
 # Normalize to stereo (handles mono files, prevents crossfade channel mismatch)
 music = audio_to_stereo(music)
+
+# Normalize volume across tracks using ReplayGain tags (no-op if tags absent)
+enable_replaygain_metadata()
 
 # Crossfade between tracks (reduced from 5s to 3s to limit stall window)
 music = crossfade(duration=3.0, music)
