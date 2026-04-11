@@ -12,16 +12,18 @@ settings.server.socket.path := environment.get(default="/tmp/agent-radio.sock", 
 
 # --- Music source ---
 # Brain's /next-track endpoint manages selection with recency-penalized shuffle.
-# Liquidsoap requests the next track via curl; brain returns a file path.
-# v2.2: request.dynamic takes a function returning a request value.
+# Uses http.get (built-in, no curl dependency) to fetch file path from brain.
 # retry_delay prevents tight-loop request leak when brain returns empty.
 brain_port = environment.get(default="8001", "BRAIN_PORT")
 def next_track_request() =
-  uri = process.read("curl -sf http://localhost:#{brain_port}/next-track")
-  if uri == "" then
-    log.info("next-track returned empty, waiting for retry")
+  r = http.get("http://localhost:#{brain_port}/next-track")
+  uri = "#{r}"
+  if r.status_code != 200 or uri == "" then
+    log.info("next-track: status=#{r.status_code}, waiting for retry")
+    request.create("")
+  else
+    request.create(uri)
   end
-  request.create(uri)
 end
 music = request.dynamic(id="music", retry_delay=5., next_track_request)
 
