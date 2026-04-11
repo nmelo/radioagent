@@ -13,11 +13,11 @@ settings.server.socket.path := environment.get(default="/tmp/agent-radio.sock", 
 # --- Music source ---
 # Brain's /next-track endpoint manages selection with recency-penalized shuffle.
 # Liquidsoap requests the next track via curl; brain returns a file path.
+# v2.2 API: request.dynamic takes a function returning a URI string.
 brain_port = environment.get(default="8001", "BRAIN_PORT")
-music = request.dynamic(id="music", {
-  result = process.read("curl -sf http://localhost:#{brain_port}/next-track")
-  request.create(result)
-})
+music = request.dynamic(id="music",
+  fun () -> process.read("curl -sf http://localhost:#{brain_port}/next-track")
+)
 
 # Log track changes
 music = source.on_track(music, fun(m) -> begin
