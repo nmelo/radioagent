@@ -36,28 +36,35 @@ class PlaylistManager:
         self.scan()
         self._start_rescan_timer()
 
+    def _track_key(self, path: Path) -> str:
+        """Stable key for history: relative path from music_dir."""
+        try:
+            return str(path.relative_to(self._music_dir))
+        except ValueError:
+            return path.name
+
     def scan(self) -> None:
-        """Scan the music directory for audio files."""
+        """Recursively scan the music directory for audio files."""
         if not self._music_dir.exists():
             logger.warning("Music directory does not exist: %s", self._music_dir)
             return
 
         found = sorted(
-            p for p in self._music_dir.iterdir()
+            p for p in self._music_dir.rglob("*")
             if p.is_file() and p.suffix.lower() in AUDIO_EXTENSIONS
         )
 
         with self._lock:
-            old_names = {t.name for t in self._tracks}
-            new_names = {t.name for t in found}
-            added = new_names - old_names
-            removed = old_names - new_names
+            old_keys = {self._track_key(t) for t in self._tracks}
+            new_keys = {self._track_key(t) for t in found}
+            added = new_keys - old_keys
+            removed = old_keys - new_keys
 
             self._tracks = found
 
             # Clean history entries referencing files no longer in the pool
             before = len(self._history)
-            self._history = [h for h in self._history if h in new_names]
+            self._history = [h for h in self._history if h in new_keys]
             cleaned = before - len(self._history)
             if cleaned:
                 logger.info("Cleaned %d stale entries from play history", cleaned)
@@ -96,7 +103,7 @@ class PlaylistManager:
             selected = random.choices(self._tracks, weights=weights, k=1)[0]
 
             # Record in history
-            self._history.append(selected.name)
+            self._history.append(self._track_key(selected))
             if len(self._history) > HISTORY_MAX:
                 self._history = self._history[-HISTORY_MAX:]
 
@@ -111,8 +118,8 @@ class PlaylistManager:
         cooldown = self.cooldown_window
         weights = []
         for track in self._tracks:
-            name = track.name
-            plays_since = self._plays_since_last(name)
+            key = self._track_key(track)
+            plays_since = self._plays_since_last(key)
             if plays_since is None:
                 # Never played -> full weight
                 weights.append(1.0)

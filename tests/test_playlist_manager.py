@@ -12,11 +12,13 @@ from playlist_manager import PlaylistManager, AUDIO_EXTENSIONS
 
 
 def _make_tracks(tmp_path: Path, names: list[str]) -> Path:
-    """Create fake audio files in a temp directory."""
+    """Create fake audio files in a temp directory. Supports subdirs via /."""
     music = tmp_path / "music"
     music.mkdir()
     for name in names:
-        (music / name).write_bytes(b"fake audio")
+        p = music / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"fake audio")
     return music
 
 
@@ -48,6 +50,18 @@ class TestScan:
              patch.object(PlaylistManager, "_start_rescan_timer"):
             pm = PlaylistManager(tmp_path / "nonexistent")
         assert pm.track_count == 0
+
+    def test_scans_subdirectories(self, tmp_path):
+        music = _make_tracks(tmp_path, [
+            "soulseek/artist1/track1.mp3",
+            "soulseek/artist2/track2.flac",
+            "nx_2000/ambient.ogg",
+            "top_level.wav",
+        ])
+        with patch.object(PlaylistManager, "_load_state"), \
+             patch.object(PlaylistManager, "_start_rescan_timer"):
+            pm = PlaylistManager(music)
+        assert pm.track_count == 4
 
     def test_rescan_picks_up_new_files(self, tmp_path):
         music = _make_tracks(tmp_path, ["a.mp3"])
@@ -199,3 +213,12 @@ class TestPersistence:
             pm = PlaylistManager(music)
         # deleted.mp3 should be cleaned from history during scan
         assert "deleted.mp3" not in pm._history
+
+    def test_subdir_tracks_in_history_use_relative_path(self, tmp_path):
+        state_path = tmp_path / "state.json"
+        music = _make_tracks(tmp_path, ["sub/track.mp3"])
+        with patch("playlist_manager.STATE_PATH", state_path), \
+             patch.object(PlaylistManager, "_start_rescan_timer"):
+            pm = PlaylistManager(music)
+            pm.next_track()
+        assert pm._history[0] == "sub/track.mp3"
