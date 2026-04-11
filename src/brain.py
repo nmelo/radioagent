@@ -243,6 +243,42 @@ def validate_wav(path: Path, min_duration: float = 0.5, max_duration: float = 30
 # --- Liquidsoap socket communication ---
 
 
+def push_music_to_liquidsoap(socket_path: Path, file_path: Path) -> bool:
+    """Push a music track to Liquidsoap's music queue via Unix socket."""
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(5.0)
+        s.connect(str(socket_path))
+        s.sendall(f"music.push {file_path}\r\n".encode())
+        resp = b""
+        while b"END" not in resp:
+            chunk = s.recv(1024)
+            if not chunk:
+                break
+            resp += chunk
+        s.close()
+        decoded = resp.decode().replace("END", "").strip()
+        logger.debug("Music push response: %s", decoded)
+        return bool(decoded and "Error" not in decoded)
+    except (socket.error, socket.timeout) as e:
+        logger.warning("Music push failed: %s", e)
+        return False
+
+
+def query_music_queue_length(socket_path: Path) -> int:
+    """Return the number of pending requests in the music queue."""
+    result = query_liquidsoap(socket_path, "music.queue")
+    if not result:
+        return 0
+    # music.queue returns space-separated RIDs, empty string = 0
+    rids = result.strip().split()
+    return len(rids) if rids != [""] else 0
+
+
+MUSIC_QUEUE_TARGET = 2  # keep this many tracks queued ahead
+MUSIC_QUEUE_POLL_INTERVAL = 3  # seconds between queue checks
+
+
 def push_to_liquidsoap(socket_path: Path, wav_path: Path, retries: int = 3) -> bool:
     """Push a WAV file to Liquidsoap's voice queue via Unix socket."""
     for attempt in range(1, retries + 1):
@@ -501,17 +537,47 @@ def create_app(config: RadioConfig, tts: TTSEngine,
     music_level = DEFAULT_MUSIC_LEVEL
     tones_level = DEFAULT_TONES_LEVEL
 
+    music_feeder_task = None
+
+    async def music_feeder_loop():
+        """Background task: keep the Liquidsoap music queue topped up."""
+        if not playlist:
+            return
+        # Initial delay: wait for Liquidsoap socket to be ready
+        await asyncio.sleep(3)
+        logger.info("Music feeder started, target queue depth=%d", MUSIC_QUEUE_TARGET)
+        while True:
+            try:
+                queue_len = query_music_queue_length(config.liquidsoap_socket)
+                needed = MUSIC_QUEUE_TARGET - queue_len
+                for _ in range(max(0, needed)):
+                    track = playlist.next_track()
+                    if not track:
+                        break
+                    ok = push_music_to_liquidsoap(config.liquidsoap_socket, track)
+                    if ok:
+                        logger.debug("Queued music: %s (queue was %d)", track.name, queue_len)
+                    else:
+                        logger.warning("Failed to queue music: %s", track.name)
+                        break
+            except Exception:
+                logger.exception("Music feeder error")
+            await asyncio.sleep(MUSIC_QUEUE_POLL_INTERVAL)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        nonlocal drain_task
+        nonlocal drain_task, music_feeder_task
         WAV_DIR.mkdir(exist_ok=True)
         drain_task = asyncio.create_task(rate_limiter.drain_loop())
+        music_feeder_task = asyncio.create_task(music_feeder_loop())
         logger.info("Brain started on port %d", config.webhook_port)
         logger.info("Stream: http://localhost:%d%s", config.icecast_port, config.icecast_mount)
         yield
         # Shutdown: drain remaining announcements
         logger.info("Shutting down, draining %d queued announcements...", len(rate_limiter.queue))
         drain_task.cancel()
+        if music_feeder_task:
+            music_feeder_task.cancel()
         rate_limiter.drain_remaining()
         # Stop playlist rescan timer
         if playlist:
