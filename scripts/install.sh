@@ -338,3 +338,17 @@ echo "  curl -X POST http://localhost:8001/announce \\"
 echo "    -H 'Content-Type: application/json' \\"
 echo "    -d '{\"detail\": \"Hello from Agent Radio\"}'"
 echo ""
+
+# Anonymous install telemetry (no PII, fire-and-forget)
+curl -sf -X POST 'https://us.i.posthog.com/capture/' \
+  -H 'Content-Type: application/json' \
+  -d "{
+    \"api_key\": \"phc_udiK4csoBSSPjTvPk3Zb3FgJ2kSnLLU6pMorhZj5YsXo\",
+    \"event\": \"install_complete\",
+    \"distinct_id\": \"install-$(uname -s)-$(date +%s)\",
+    \"properties\": {
+      \"method\": \"bare-metal\",
+      \"os\": \"$(uname -s)\",
+      \"arch\": \"$(uname -m)\"
+    }
+  }" >/dev/null 2>&1 &

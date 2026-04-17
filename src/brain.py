@@ -516,6 +516,29 @@ def process_announcement(announcement: QueuedAnnouncement, tts: TTSEngine,
     return ok
 
 
+_POSTHOG_KEY = "phc_udiK4csoBSSPjTvPk3Zb3FgJ2kSnLLU6pMorhZj5YsXo"
+
+
+def _posthog_capture(event: str, properties: dict | None = None) -> None:
+    """Fire-and-forget PostHog event. Failures are silently ignored."""
+    import urllib.request
+    try:
+        data = json.dumps({
+            "api_key": _POSTHOG_KEY,
+            "event": event,
+            "distinct_id": f"brain-{socket.gethostname()}",
+            "properties": properties or {},
+        }).encode()
+        req = urllib.request.Request(
+            "https://us.i.posthog.com/capture/",
+            data=data,
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=3)
+    except Exception:
+        pass
+
+
 # --- App factory ---
 
 
@@ -529,6 +552,7 @@ def create_app(config: RadioConfig, tts: TTSEngine,
     )
     drain_task = None
     announcement_history: deque[dict] = deque(maxlen=20)
+    announcement_count = 0
     sse_clients: list[asyncio.Queue] = []
     music_muted = False
     announcements_muted = False
@@ -856,6 +880,21 @@ def create_app(config: RadioConfig, tts: TTSEngine,
             record["tone"] = tone_name
         announcement_history.appendleft(record)
         _broadcast_sse(sse_clients, "announcement", record)
+
+        nonlocal announcement_count
+        announcement_count += 1
+        if announcement_count == 1:
+            threading.Thread(
+                target=_posthog_capture,
+                args=("first_announcement", {"kind": req.kind}),
+                daemon=True,
+            ).start()
+        elif announcement_count == 2:
+            threading.Thread(
+                target=_posthog_capture,
+                args=("second_announcement", {"kind": req.kind}),
+                daemon=True,
+            ).start()
 
         # Tone-only events: no voice, we're done
         if tone_only or script is None:
